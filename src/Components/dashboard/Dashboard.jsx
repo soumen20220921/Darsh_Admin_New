@@ -1,39 +1,41 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import {
-  ShoppingBag,
-  Users,
-  Package,
+  AlertTriangle,
+  ArrowDownRight,
+  ArrowUpRight,
+  BarChart3,
+  CalendarDays,
+  CheckCircle2,
+  ChevronDown,
+  Clock3,
+  Download,
+  Eye,
   IndianRupee,
-  TrendingUp,
-  Calendar,
-  ArrowUp,
-  ArrowDown,
-  Star,
-  CreditCard,
+  Loader2,
+  Package,
+  PackageOpen,
   PieChart,
   RefreshCw,
-  Filter,
-  XCircle,
-  CheckCircle,
-  AlertCircle,
-  Download,
+  ShoppingBag,
   Sparkles,
-  Zap,
-  BarChart3,
-  LineChart
+  Star,
+  TrendingUp,
+  Truck,
+  Users,
+  XCircle,
 } from "lucide-react";
-import { Line, Bar, Doughnut } from "react-chartjs-2";
+import { Bar, Doughnut, Line } from "react-chartjs-2";
 import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend,
   ArcElement,
+  BarElement,
+  CategoryScale,
+  Chart as ChartJS,
+  Filler,
+  Legend,
+  LinearScale,
+  LineElement,
+  PointElement,
+  Tooltip,
 } from "chart.js";
 import { useAppContext } from "../../context/Context";
 
@@ -43,950 +45,1722 @@ ChartJS.register(
   PointElement,
   LineElement,
   BarElement,
-  Title,
+  ArcElement,
+  Filler,
   Tooltip,
-  Legend,
-  ArcElement
+  Legend
 );
 
-// Helper functions
-const formatCurrency = (value) => `₹${Number(value || 0).toLocaleString()}`;
-const getOrderDate = (order) => new Date(order.orderDate || order.createdAt || Date.now());
+const COLORS = {
+  bg: "#0b0b0b",
+  card: "#171717",
+  card2: "#121212",
+  amber: "#f5a90b",
+  blue: "#4ea5e8",
+  green: "#3db878",
+  pink: "#f25d75",
+  purple: "#a879d0",
+  gray: "#8b8b8b",
+};
 
-const Dashboard = () => {
-  const { allProduct, orders, allUser, getProduct, fetchOrders, getUsers } = useAppContext();
-  const [timeRange, setTimeRange] = useState("month");
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [refreshPulse, setRefreshPulse] = useState(false);
-  const [exporting, setExporting] = useState(false);
-  const [activeOrderTab, setActiveOrderTab] = useState("all");
-  const [mobileView, setMobileView] = useState(false);
+const currency = (value) =>
+  `₹${Number(value || 0).toLocaleString("en-IN", {
+    maximumFractionDigits: 0,
+  })}`;
 
-  // Auto-refresh pulse effect
+const compactCurrency = (value) => {
+  const n = Number(value || 0);
+  if (n >= 10000000) return `₹${(n / 10000000).toFixed(1)}Cr`;
+  if (n >= 100000) return `₹${(n / 100000).toFixed(1)}L`;
+  if (n >= 1000) return `₹${(n / 1000).toFixed(1)}K`;
+  return `₹${n}`;
+};
+
+const orderDate = (order) =>
+  new Date(
+    order?.orderDate ||
+      order?.createdAt ||
+      order?.date ||
+      Date.now()
+  );
+
+const statusOf = (status) =>
+  String(status || "pending")
+    .toLowerCase()
+    .trim()
+    .replace(/[_-]/g, " ");
+
+const quantityOf = (item) => Number(item?.quantity) || 1;
+
+const priceOf = (item) =>
+  Number(item?.price) ||
+  Number(item?.rate) ||
+  Number(item?.amount) ||
+  0;
+
+const productIdOf = (item) =>
+  item?.product ||
+  item?.productId ||
+  item?._id ||
+  item?.id ||
+  null;
+
+const getStock = (product) =>
+  Number(
+    product?.stock ??
+      product?.quantity ??
+      product?.availableStock ??
+      product?.inventory ??
+      0
+  );
+
+const AnimatedNumber = ({ value = 0, prefix = "", duration = 900 }) => {
+  const [display, setDisplay] = useState(0);
+  const target = Number(value) || 0;
+
   useEffect(() => {
-    const pulseInterval = setInterval(() => {
-      setRefreshPulse(true);
-      setTimeout(() => setRefreshPulse(false), 1000);
-    }, 30000);
+    let frame;
+    const start = performance.now();
 
-    return () => clearInterval(pulseInterval);
-  }, []);
-
-  useEffect(() => {
-    const checkScreenSize = () => {
-      setMobileView(window.innerWidth < 768);
+    const tick = (now) => {
+      const progress = Math.min((now - start) / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setDisplay(target * eased);
+      if (progress < 1) frame = requestAnimationFrame(tick);
     };
 
-    checkScreenSize();
-    window.addEventListener('resize', checkScreenSize);
-    return () => window.removeEventListener('resize', checkScreenSize);
-  }, []);
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [target, duration]);
 
-  const normalizeStatus = (s) => (s ? String(s).toLowerCase() : "not paid");
+  return (
+    <>
+      {prefix}
+      {display.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+    </>
+  );
+};
+
+const Card = ({ children, className = "", hover = true }) => (
+  <div
+    className={`relative overflow-hidden rounded-2xl border border-white/[0.08] bg-[#171717] ${
+      hover
+        ? "transition-all duration-500 hover:-translate-y-0.5 hover:border-white/[0.13] hover:shadow-2xl"
+        : ""
+    } ${className}`}
+  >
+    {children}
+  </div>
+);
+
+const StatCard = ({
+  title,
+  value,
+  icon: Icon,
+  growth,
+  subtitle,
+  accent = "amber",
+  currencyValue = false,
+  delay = 0,
+}) => {
+  const accentMap = {
+    amber: {
+      text: "text-amber-400",
+      bg: "bg-amber-500/10",
+      border: "border-amber-500/20",
+      glow: "group-hover:shadow-amber-500/10",
+    },
+    blue: {
+      text: "text-blue-400",
+      bg: "bg-blue-500/10",
+      border: "border-blue-500/20",
+      glow: "group-hover:shadow-blue-500/10",
+    },
+    green: {
+      text: "text-emerald-400",
+      bg: "bg-emerald-500/10",
+      border: "border-emerald-500/20",
+      glow: "group-hover:shadow-emerald-500/10",
+    },
+  };
+
+  const theme = accentMap[accent] || accentMap.amber;
+  const positive = Number(growth) >= 0;
+
+  return (
+    <Card
+      className={`group animate-[fadeUp_.55s_ease_both] ${theme.glow}`}
+    >
+      <div
+        className="absolute left-0 right-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-500 to-transparent opacity-40"
+        style={{ animationDelay: `${delay}ms` }}
+      />
+      <div className="absolute -right-14 -top-14 h-32 w-32 rounded-full bg-amber-500/[0.035] blur-3xl transition-all duration-700 group-hover:bg-amber-500/[0.08]" />
+
+      <div className="relative p-5">
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-[#8b8b8b]">
+              {title}
+            </p>
+
+            <p className="mt-4 text-[30px] font-bold tracking-tight text-white sm:text-[34px]">
+              {currencyValue ? (
+                <AnimatedNumber value={value} prefix="₹" />
+              ) : (
+                <AnimatedNumber value={value} />
+              )}
+            </p>
+
+            <div className="mt-3 flex items-center gap-2">
+              {growth !== undefined && growth !== null && (
+                <span
+                  className={`inline-flex items-center gap-1 text-xs font-semibold ${
+                    positive ? "text-emerald-400" : "text-rose-400"
+                  }`}
+                >
+                  {positive ? (
+                    <ArrowUpRight size={13} />
+                  ) : (
+                    <ArrowDownRight size={13} />
+                  )}
+                  {Math.abs(Number(growth)).toFixed(1)}%
+                </span>
+              )}
+              <span className="text-xs text-[#737373]">{subtitle}</span>
+            </div>
+          </div>
+
+          <div
+            className={`flex h-11 w-11 items-center justify-center rounded-xl border ${theme.bg} ${theme.text} ${theme.border} transition duration-500 group-hover:scale-110 group-hover:rotate-3`}
+          >
+            <Icon size={21} strokeWidth={1.8} />
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
+};
+
+const chartBase = {
+  responsive: true,
+  maintainAspectRatio: false,
+  animation: { duration: 1200, easing: "easeOutQuart" },
+  plugins: {
+    legend: { display: false },
+    tooltip: {
+      backgroundColor: "#202020",
+      borderColor: "rgba(255,255,255,.10)",
+      borderWidth: 1,
+      titleColor: "#fff",
+      bodyColor: "#bdbdbd",
+      padding: 12,
+      displayColors: false,
+    },
+  },
+};
+
+const Dashboard = () => {
+  const {
+    allProduct,
+    orders,
+    allUser,
+    getProduct,
+    fetchOrders,
+    getUsers,
+    setTab
+  } = useAppContext();
+
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [range, setRange] = useState(30);
+  const [rangeOpen, setRangeOpen] = useState(false);
+  // 🔽 Default to "paid" so only paid orders appear first
+  const [orderTab, setOrderTab] = useState("paid");
 
   useEffect(() => {
     let mounted = true;
+
     const load = async () => {
       try {
         setLoading(true);
-        if (getProduct) await getProduct();
-        if (fetchOrders) await fetchOrders();
-        if (getUsers) await getUsers();
-      } catch (e) {
+        await Promise.all([
+          getProduct ? getProduct() : Promise.resolve(),
+          fetchOrders ? fetchOrders() : Promise.resolve(),
+          getUsers ? getUsers() : Promise.resolve(),
+        ]);
+      } catch (error) {
+        console.error("Dashboard loading error:", error);
       } finally {
         if (mounted) setLoading(false);
       }
     };
+
     load();
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, []);
 
-  useEffect(() => {
-    if (allProduct !== null && orders !== null && allUser !== null) {
-      setRefreshing(false);
-      setLoading(false);
-    }
-  }, [allProduct, orders, allUser]);
-
   const refreshData = async () => {
-    setRefreshing(true);
     try {
+      setRefreshing(true);
       await Promise.all([
         getProduct ? getProduct() : Promise.resolve(),
         fetchOrders ? fetchOrders() : Promise.resolve(),
         getUsers ? getUsers() : Promise.resolve(),
       ]);
+    } catch (error) {
+      console.error("Dashboard refresh error:", error);
     } finally {
       setRefreshing(false);
     }
   };
 
-  const exportDashboardData = async () => {
-    setExporting(true);
-    
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    try {
-      const reportData = {
-        'Report Type': 'Dashboard Analytics Export',
-        'Export Date': new Date().toLocaleDateString('en-IN'),
-        'Export Time': new Date().toLocaleTimeString('en-IN'),
-        'Time Range': timeRange === 'week' ? 'Last 7 Days' : timeRange === 'month' ? 'Last 6 Months' : 'Last 12 Months',
-        
-        'Total Revenue': formatCurrency(totalRevenue),
-        'Total Paid Orders': totalOrders,
-        'Total Users': totalUsers,
-        'Total Products': totalProducts,
-        'Today Revenue': formatCurrency(todaysRevenue),
-        'Today Orders': todaysPaidOrders.length,
-        'Average Order Value': formatCurrency(avgOrderValue),
-        'Payment Success Rate': `${paymentSuccessRate}%`,
-        'Conversion Rate': `${totalUsers > 0 ? ((totalOrders / totalUsers) * 100).toFixed(1) : 0}%`,
-        
-        'Revenue Growth': `${revenueGrowth.toFixed(1)}%`,
-        'Order Growth': `${orderGrowth.toFixed(1)}%`,
-        'User Growth': `${userGrowth.toFixed(1)}%`,
-        
-        'All Orders': orderStatusCounts.all,
-        'Paid Orders': orderStatusCounts.paid,
-        'Pending Orders': orderStatusCounts.pending,
-        'Failed Orders': orderStatusCounts.failed,
-        
-        'Chart Period Labels': processChartData.labels.join('; '),
-        'Revenue Data': processChartData.salesData.map(d => d.revenue).join('; '),
-        'Order Count Data': processChartData.orderCountData.map(d => d.count).join('; '),
-        'User Growth Data': processChartData.userData.map(d => d.users).join('; '),
-        
-        'Product Categories': Object.keys(processChartData.categoryData).join('; '),
-        'Category Counts': Object.values(processChartData.categoryData).join('; '),
-        
-        // Top Products
-        'Top Products': topProducts.map(p => p.name).join('; '),
-        'Top Products Revenue': topProducts.map(p => p.revenue).join('; '),
-        
-        'Records Count': `Users: ${totalUsers}, Orders: ${allOrders.length}, Products: ${totalProducts}`
-      };
-
-      const csvContent = Object.entries(reportData)
-        .map(([key, value]) => `"${key}","${value}"`)
-        .join('\n');
-
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const downloadUrl = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      const timestamp = new Date().toISOString().split('T')[0];
-      
-      link.setAttribute('href', downloadUrl);
-      link.setAttribute('download', `dashboard_export_${timestamp}_analytics.csv`);
-      link.style.visibility = 'hidden';
-      
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(downloadUrl);
-      
-      setTimeout(() => setExporting(false), 500);
-    } catch (error) {
-      console.error('Export error:', error);
-      setExporting(false);
-    }
-  };
-
   const allOrders = useMemo(() => {
-    if (!orders) return [];
+    if (!Array.isArray(orders)) return [];
+
     return orders.map((order) => {
-      const productCount = order.products
-        ? order.products.reduce((total, p) => total + (Number(p.quantity) || 1), 0)
+      const status = statusOf(
+        order?.payStatus ||
+          order?.paymentStatus ||
+          order?.status
+      );
+
+      const itemCount = Array.isArray(order?.products)
+        ? order.products.reduce(
+            (sum, item) => sum + quantityOf(item),
+            0
+          )
         : 0;
-      const payStatus = normalizeStatus(order.payStatus);
-      let statusColor = "text-yellow-600";
-      let statusBg = "bg-yellow-100";
-      if (payStatus === "paid") {
-        statusColor = "text-green-600";
-        statusBg = "bg-green-100";
-      } else if (payStatus === "failed") {
-        statusColor = "text-red-600";
-        statusBg = "bg-red-100";
-      }
+
       return {
         ...order,
-        payStatusNormalized: payStatus,
-        productCount,
-        statusColor,
-        statusBg,
+        normalizedStatus: status,
+        itemCount,
+        orderDate: orderDate(order),
       };
     });
   }, [orders]);
 
-  const filteredOrders = useMemo(() => {
-    if (activeOrderTab === "all") return allOrders;
-    return allOrders.filter((o) => {
-      if (activeOrderTab === "pending") return o.payStatusNormalized !== "paid" && o.payStatusNormalized !== "failed";
-      return o.payStatusNormalized === activeOrderTab;
-    });
-  }, [allOrders, activeOrderTab]);
+  const paidOrders = useMemo(
+    () =>
+      allOrders.filter(
+        (o) =>
+          o.normalizedStatus === "paid" ||
+          o.normalizedStatus === "payment successful"
+      ),
+    [allOrders]
+  );
 
-  const paidOrders = useMemo(() => allOrders.filter((o) => o.payStatusNormalized === "paid"), [allOrders]);
+  const pendingOrders = useMemo(
+    () =>
+      allOrders.filter(
+        (o) =>
+          !["paid", "payment successful", "failed", "cancelled"].includes(
+            o.normalizedStatus
+          )
+      ),
+    [allOrders]
+  );
 
-  const totalUsers = allUser?.length || 0;
+  const failedOrders = useMemo(
+    () =>
+      allOrders.filter(
+        (o) =>
+          o.normalizedStatus === "failed" ||
+          o.normalizedStatus === "cancelled"
+      ),
+    [allOrders]
+  );
+
+  const totalUsers = Array.isArray(allUser) ? allUser.length : 0;
+  const totalProducts = Array.isArray(allProduct)
+    ? allProduct.length
+    : 0;
   const totalOrders = paidOrders.length;
-  const totalProducts = allProduct?.length || 0;
-  const totalRevenue = useMemo(() => paidOrders.reduce((s, o) => s + (Number(o.amount) || 0), 0), [paidOrders]);
 
-  const todayStart = useMemo(() => {
+  const totalRevenue = useMemo(
+    () =>
+      paidOrders.reduce(
+        (sum, order) => sum + (Number(order?.amount) || 0),
+        0
+      ),
+    [paidOrders]
+  );
+
+  const rangeStart = useMemo(() => {
     const d = new Date();
+    d.setDate(d.getDate() - range + 1);
     d.setHours(0, 0, 0, 0);
     return d;
-  }, []);
-  const todayEnd = useMemo(() => {
-    const d = new Date();
-    d.setHours(23, 59, 59, 999);
-    return d;
-  }, []);
+  }, [range]);
 
-  const todaysPaidOrders = useMemo(() =>
-    paidOrders.filter((o) => {
-      const od = getOrderDate(o);
-      return od >= todayStart && od <= todayEnd;
-    }) || [],
-  [paidOrders, todayStart, todayEnd]);
+  const previousPeriod = useMemo(() => {
+    const end = new Date(rangeStart);
+    const start = new Date(rangeStart);
+    end.setDate(end.getDate() + range);
+    start.setDate(start.getDate() - range);
+    return { start, end };
+  }, [rangeStart, range]);
 
-  const todaysRevenue = useMemo(() => todaysPaidOrders.reduce((s, o) => s + (Number(o.amount) || 0), 0), [todaysPaidOrders]);
+  const rangeOrders = useMemo(
+    () => paidOrders.filter((o) => o.orderDate >= rangeStart),
+    [paidOrders, rangeStart]
+  );
 
-  const processChartData = useMemo(() => {
-    const now = new Date();
-    const salesData = [];
-    const orderCountData = [];
-    const userData = [];
-    const categoryData = {};
+  const rangeRevenue = useMemo(
+    () =>
+      rangeOrders.reduce(
+        (sum, order) => sum + (Number(order?.amount) || 0),
+        0
+      ),
+    [rangeOrders]
+  );
 
-    let dataPoints = 6;
-    let timeUnit = "month";
+  const previousRevenue = useMemo(
+    () =>
+      paidOrders
+        .filter(
+          (o) =>
+            o.orderDate >= previousPeriod.start &&
+            o.orderDate < previousPeriod.end
+        )
+        .reduce(
+          (sum, order) => sum + (Number(order?.amount) || 0),
+          0
+        ),
+    [paidOrders, previousPeriod]
+  );
 
-    if (timeRange === "week") {
-      dataPoints = 7;
-      timeUnit = "day";
-    } else if (timeRange === "year") {
-      dataPoints = 12;
-      timeUnit = "month";
-    }
+  const previousOrders = useMemo(
+    () =>
+      paidOrders.filter(
+        (o) =>
+          o.orderDate >= previousPeriod.start &&
+          o.orderDate < previousPeriod.end
+      ).length,
+    [paidOrders, previousPeriod]
+  );
 
+  const growth = (current, previous) =>
+    previous
+      ? ((current - previous) / previous) * 100
+      : current > 0
+      ? 100
+      : 0;
+
+  const revenueGrowth = growth(rangeRevenue, previousRevenue);
+  const orderGrowth = growth(rangeOrders.length, previousOrders);
+
+  const avgOrderValue = totalOrders
+    ? totalRevenue / totalOrders
+    : 0;
+
+  const paymentSuccessRate = allOrders.length
+    ? (paidOrders.length / allOrders.length) * 100
+    : 0;
+
+  const todayRevenue = useMemo(() => {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    const end = new Date();
+    end.setHours(23, 59, 59, 999);
+
+    return paidOrders
+      .filter((o) => o.orderDate >= start && o.orderDate <= end)
+      .reduce(
+        (sum, order) => sum + (Number(order?.amount) || 0),
+        0
+      );
+  }, [paidOrders]);
+
+  const todayOrders = useMemo(() => {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    const end = new Date();
+    end.setHours(23, 59, 59, 999);
+
+    return paidOrders.filter(
+      (o) => o.orderDate >= start && o.orderDate <= end
+    ).length;
+  }, [paidOrders]);
+
+  const revenueChart = useMemo(() => {
     const labels = [];
-    for (let i = dataPoints - 1; i >= 0; i--) {
-      if (timeUnit === "day") {
-        const date = new Date(now);
-        date.setDate(date.getDate() - i);
-        labels.push(date.toLocaleDateString("en-US", { weekday: "short" }));
-      } else {
-        const date = new Date(now);
-        date.setMonth(date.getMonth() - i);
-        labels.push(date.toLocaleDateString("en-US", { month: "short" }));
-      }
+    const values = [];
+
+    for (let i = range - 1; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      d.setHours(0, 0, 0, 0);
+
+      const next = new Date(d);
+      next.setDate(next.getDate() + 1);
+
+      const value = paidOrders
+        .filter((o) => o.orderDate >= d && o.orderDate < next)
+        .reduce(
+          (sum, order) => sum + (Number(order?.amount) || 0),
+          0
+        );
+
+      labels.push(
+        d.toLocaleDateString("en-IN", {
+          day: "2-digit",
+          month: "short",
+        })
+      );
+      values.push(value);
     }
 
-    for (let i = 0; i < dataPoints; i++) {
-      const startDate = new Date(now);
-      if (timeUnit === "day") {
-        startDate.setDate(startDate.getDate() - (dataPoints - 1 - i));
-        startDate.setHours(0, 0, 0, 0);
-        const endDate = new Date(startDate);
-        endDate.setDate(endDate.getDate() + 1);
+    return { labels, values };
+  }, [paidOrders, range]);
 
-        const dailySales = paidOrders
-          .filter((order) => {
-            const od = getOrderDate(order);
-            return od >= startDate && od < endDate;
-          })
-          .reduce((sum, order) => sum + (Number(order.amount) || 0), 0);
+  const revenueData = {
+    labels: revenueChart.labels,
+    datasets: [
+      {
+        label: "Revenue",
+        data: revenueChart.values,
+        borderColor: COLORS.amber,
+        backgroundColor: "rgba(245,169,11,.10)",
+        fill: true,
+        tension: 0.45,
+        borderWidth: 2.5,
+        pointRadius: 0,
+        pointHoverRadius: 5,
+        pointHoverBackgroundColor: COLORS.amber,
+        pointHoverBorderColor: "#171717",
+        pointHoverBorderWidth: 3,
+      },
+    ],
+  };
 
-        const dailyOrders = paidOrders.filter((order) => {
-          const od = getOrderDate(order);
-          return od >= startDate && od < endDate;
-        }).length;
+  const revenueOptions = {
+    ...chartBase,
+    interaction: { intersect: false, mode: "index" },
+    plugins: {
+      ...chartBase.plugins,
+      tooltip: {
+        ...chartBase.plugins.tooltip,
+        callbacks: {
+          label: (ctx) => `Revenue: ${currency(ctx.raw)}`,
+        },
+      },
+    },
+    scales: {
+      x: {
+        grid: { display: false },
+        border: { display: false },
+        ticks: {
+          color: "#6f6f6f",
+          font: { size: 10 },
+          maxTicksLimit: range === 30 ? 7 : 10,
+        },
+      },
+      y: {
+        beginAtZero: true,
+        grid: {
+          color: "rgba(255,255,255,.055)",
+        },
+        border: { display: false },
+        ticks: {
+          color: "#6f6f6f",
+          font: { size: 10 },
+          callback: (v) => compactCurrency(v),
+        },
+      },
+    },
+  };
 
-        salesData.push({ period: labels[i], revenue: dailySales });
-        orderCountData.push({ period: labels[i], count: dailyOrders });
-      } else {
-        startDate.setMonth(startDate.getMonth() - (dataPoints - 1 - i));
-        startDate.setDate(1);
-        startDate.setHours(0, 0, 0, 0);
-        const endDate = new Date(startDate);
-        endDate.setMonth(endDate.getMonth() + 1);
+  const categoryEntries = useMemo(() => {
+    const map = {};
 
-        const monthlySales = paidOrders
-          .filter((order) => {
-            const od = getOrderDate(order);
-            return od >= startDate && od < endDate;
-          })
-          .reduce((sum, order) => sum + (Number(order.amount) || 0), 0);
-
-        const monthlyOrders = allOrders.filter((order) => {
-          const od = getOrderDate(order);
-          return od >= startDate && od < endDate;
-        }).length;
-
-        salesData.push({ period: labels[i], revenue: monthlySales });
-        orderCountData.push({ period: labels[i], count: monthlyOrders });
-      }
-    }
-
-    if (allUser && allUser.length) {
-      for (let i = 0; i < dataPoints; i++) {
-        const startDate = new Date(now);
-        if (timeUnit === "day") {
-          startDate.setDate(startDate.getDate() - (dataPoints - 1 - i));
-          startDate.setHours(0, 0, 0, 0);
-          const endDate = new Date(startDate);
-          endDate.setDate(endDate.getDate() + 1);
-          const dailyUsers = allUser.filter((user) => {
-            const ud = new Date(user.createdAt || user.joinedDate || 0);
-            return ud >= startDate && ud < endDate;
-          }).length;
-          userData.push({ period: labels[i], users: dailyUsers });
-        } else {
-          startDate.setMonth(startDate.getMonth() - (dataPoints - 1 - i));
-          startDate.setDate(1);
-          startDate.setHours(0, 0, 0, 0);
-          const endDate = new Date(startDate);
-          endDate.setMonth(endDate.getMonth() + 1);
-          const monthlyUsers = allUser.filter((user) => {
-            const ud = new Date(user.createdAt || user.joinedDate || 0);
-            return ud >= startDate && ud < endDate;
-          }).length;
-          userData.push({ period: labels[i], users: monthlyUsers });
-        }
-      }
-    }
-
-    if (allProduct) {
+    if (Array.isArray(allProduct)) {
       allProduct.forEach((product) => {
-        const category = product.category || "Uncategorized";
-        categoryData[category] = (categoryData[category] || 0) + 1;
+        const category =
+          product?.category ||
+          product?.subCategory ||
+          "Other";
+        map[category] = (map[category] || 0) + 1;
       });
     }
 
-    return { salesData, orderCountData, userData, labels, categoryData };
-  }, [paidOrders, allOrders, allUser, timeRange, allProduct]);
+    return Object.entries(map)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 7);
+  }, [allProduct]);
 
-  const calculateGrowth = (data, key) => {
-    if (!data || data.length < 2) return 0;
-    const current = data[data.length - 1][key] || 0;
-    const previous = data[data.length - 2][key] || 0;
-    if (previous === 0) return current > 0 ? 100 : 0;
-    return ((current - previous) / previous) * 100;
-  };
-
-  const revenueGrowth = calculateGrowth(processChartData.salesData, "revenue");
-  const userGrowth = calculateGrowth(processChartData.userData, "users");
-  const orderGrowth = calculateGrowth(processChartData.orderCountData, "count");
-
-  const avgOrderValue = totalOrders ? (totalRevenue / totalOrders).toFixed(2) : 0;
-  const paymentSuccessRate = allOrders.length ? ((paidOrders.length / allOrders.length) * 100).toFixed(1) : 0;
-
-  const stats = [
-    {
-      name: "Total Revenue",
-      value: formatCurrency(totalRevenue),
-      icon: IndianRupee,
-      color: "text-green-600",
-      bg: "bg-gradient-to-r from-green-100 to-green-200",
-      growth: revenueGrowth,
-      period: timeRange,
-    },
-    {
-      name: "Total Paid Orders",
-      value: totalOrders,
-      icon: ShoppingBag,
-      color: "text-blue-600",
-      bg: "bg-gradient-to-r from-blue-100 to-blue-200",
-      growth: orderGrowth,
-      period: timeRange,
-    },
-    {
-      name: "Total Users",
-      value: totalUsers,
-      icon: Users,
-      color: "text-purple-600",
-      bg: "bg-gradient-to-r from-purple-100 to-purple-200",
-      growth: userGrowth,
-      period: timeRange,
-    },
-    {
-      name: "Total Products",
-      value: totalProducts,
-      icon: Package,
-      color: "text-orange-600",
-      bg: "bg-gradient-to-r from-orange-100 to-orange-200",
-    },
+  const categoryColors = [
+    COLORS.amber,
+    COLORS.blue,
+    COLORS.green,
+    COLORS.pink,
+    COLORS.purple,
+    "#8b8b8b",
+    "#e4a14b",
   ];
 
-  const orderStatusCounts = useMemo(() => ({
-    all: allOrders.length,
-    paid: allOrders.filter((order) => order.payStatusNormalized === "paid").length,
-    pending: allOrders.filter((order) => order.payStatusNormalized !== "paid" && order.payStatusNormalized !== "failed").length,
-    failed: allOrders.filter((order) => order.payStatusNormalized === "failed").length,
-  }), [allOrders]);
-
-  const salesChartData = {
-    labels: processChartData.labels || [],
+  const categoryData = {
+    labels: categoryEntries.map(([name]) => name),
     datasets: [
       {
-        label: "Revenue (₹)",
-        data: processChartData.salesData.map((d) => d.revenue),
-        borderColor: "rgb(251, 146, 60)",
-        backgroundColor: "rgba(251, 146, 60, 0.08)",
-        fill: true,
-        tension: 0.35,
-        pointStyle: "circle",
-        pointRadius: 3,
-        pointHoverRadius: 6,
-        yAxisID: "y",
+        data: categoryEntries.map(([, value]) => value),
+        backgroundColor: categoryColors,
+        borderColor: "#171717",
+        borderWidth: 4,
+        hoverOffset: 8,
       },
+    ],
+  };
+
+  const categoryOptions = {
+    ...chartBase,
+    cutout: "68%",
+    animation: {
+      animateRotate: true,
+      animateScale: true,
+      duration: 1200,
+    },
+  };
+
+  const ordersPerDay = useMemo(() => {
+    const labels = [];
+    const values = [];
+    const days = 14;
+
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      d.setHours(0, 0, 0, 0);
+
+      const next = new Date(d);
+      next.setDate(next.getDate() + 1);
+
+      const count = paidOrders.filter(
+        (o) => o.orderDate >= d && o.orderDate < next
+      ).length;
+
+      labels.push(
+        d.toLocaleDateString("en-IN", {
+          day: "2-digit",
+          month: "short",
+        })
+      );
+      values.push(count);
+    }
+
+    return { labels, values };
+  }, [paidOrders]);
+
+  const orderBarData = {
+    labels: ordersPerDay.labels,
+    datasets: [
       {
         label: "Orders",
-        data: processChartData.orderCountData.map((d) => d.count),
-        borderColor: "rgb(59, 130, 246)",
-        backgroundColor: "rgba(59, 130, 246, 0.06)",
-        fill: true,
-        tension: 0.35,
-        pointStyle: "rect",
-        pointRadius: 3,
-        pointHoverRadius: 6,
-        yAxisID: "y1",
+        data: ordersPerDay.values,
+        backgroundColor: COLORS.blue,
+        borderRadius: 7,
+        maxBarThickness: 24,
       },
     ],
   };
 
-  const userChartData = {
-    labels: processChartData.labels || [],
-    datasets: [
-      {
-        label: "New Users",
-        data: processChartData.userData.map((d) => d.users),
-        backgroundColor: "rgba(139, 92, 246, 0.7)",
-        borderRadius: 6,
-      },
-    ],
-  };
-
-  const categoryChartData = {
-    labels: Object.keys(processChartData.categoryData),
-    datasets: [
-      {
-        label: "Products by Category",
-        data: Object.values(processChartData.categoryData),
-        backgroundColor: [
-          "rgba(255, 99, 132, 0.7)",
-          "rgba(54, 162, 235, 0.7)",
-          "rgba(255, 206, 86, 0.7)",
-          "rgba(75, 192, 192, 0.7)",
-          "rgba(153, 102, 255, 0.7)",
-          "rgba(255, 159, 64, 0.7)",
-        ],
-        borderWidth: 1,
-      },
-    ],
-  };
-
-  const chartOptions = {
-    responsive: true,
-    plugins: {
-      legend: { position: "top" },
-      tooltip: { mode: "index", intersect: false },
-    },
+  const orderBarOptions = {
+    ...chartBase,
     scales: {
+      x: {
+        grid: { display: false },
+        border: { display: false },
+        ticks: { color: "#707070", font: { size: 10 } },
+      },
       y: {
-        type: "linear",
-        display: true,
-        position: "left",
-        title: { display: true, text: "Revenue (₹)" },
-        grid: { color: "rgba(0, 0, 0, 0.04)" },
+        beginAtZero: true,
+        grid: { color: "rgba(255,255,255,.05)" },
+        border: { display: false },
+        ticks: { color: "#707070", precision: 0 },
       },
-      y1: {
-        type: "linear",
-        display: true,
-        position: "right",
-        title: { display: true, text: "Orders" },
-        grid: { drawOnChartArea: false },
-      },
-      x: { grid: { display: false } },
     },
-    maintainAspectRatio: false,
   };
 
-  // Top products by revenue
+  const uploadData = useMemo(() => {
+    const labels = [];
+    const values = [];
+
+    for (let i = 13; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      d.setHours(0, 0, 0, 0);
+
+      const next = new Date(d);
+      next.setDate(next.getDate() + 1);
+
+      const count = Array.isArray(allProduct)
+        ? allProduct.filter((p) => {
+            const created = new Date(
+              p?.createdAt ||
+                p?.createdDate ||
+                p?.date ||
+                0
+            );
+            return created >= d && created < next;
+          }).length
+        : 0;
+
+      labels.push(
+        d.toLocaleDateString("en-IN", {
+          day: "2-digit",
+          month: "short",
+        })
+      );
+      values.push(count);
+    }
+
+    return { labels, values };
+  }, [allProduct]);
+
+  const uploadChartData = {
+    labels: uploadData.labels,
+    datasets: [
+      {
+        label: "Uploads",
+        data: uploadData.values,
+        backgroundColor: COLORS.green,
+        borderRadius: 7,
+        maxBarThickness: 24,
+      },
+    ],
+  };
+
+  const uploadChartOptions = {
+    ...orderBarOptions,
+    scales: {
+      ...orderBarOptions.scales,
+      y: {
+        ...orderBarOptions.scales.y,
+        ticks: { color: "#707070", precision: 0 },
+      },
+    },
+  };
+
   const topProducts = useMemo(() => {
-    if (!allProduct || !paidOrders) return [];
-    const productRevenue = {};
+    if (!Array.isArray(allProduct)) return [];
+
+    const revenueMap = {};
+
     paidOrders.forEach((order) => {
-      if (order.products) {
-        order.products.forEach((item) => {
-          const pid = item.product || item.productId || item._id || "unknown";
-          const price = Number(item.price) || Number(item.rate) || 0;
-          const qty = Number(item.quantity) || 1;
-          productRevenue[pid] = (productRevenue[pid] || 0) + price * qty;
-        });
-      }
+      if (!Array.isArray(order?.products)) return;
+
+      order.products.forEach((item) => {
+        const id = productIdOf(item);
+        if (!id) return;
+
+        revenueMap[id] =
+          (revenueMap[id] || 0) +
+          priceOf(item) * quantityOf(item);
+      });
     });
 
-    return Object.entries(productRevenue)
-      .map(([productId, revenue]) => {
-        const product = allProduct.find((p) => p._id === productId || p.id === productId);
-        return { name: product ? product.name : "Unknown Product", revenue, id: productId };
+    return Object.entries(revenueMap)
+      .map(([id, revenue]) => {
+        const product = allProduct.find(
+          (p) =>
+            String(p?._id) === String(id) ||
+            String(p?.id) === String(id)
+        );
+
+        return {
+          id,
+          revenue,
+          name: product?.name || "Unknown Product",
+          image:
+            product?.image ||
+            product?.images?.[0] ||
+            null,
+        };
       })
       .sort((a, b) => b.revenue - a.revenue)
-      .slice(0, 5);
+      .slice(0, 6);
   }, [allProduct, paidOrders]);
+
+  const awaitingDispatch = useMemo(
+    () =>
+      allOrders.filter((order) => {
+        const status = statusOf(
+          order?.deliveryStatus ||
+            order?.orderStatus ||
+            order?.status
+        );
+        return (
+          status.includes("pending") ||
+          status.includes("packing") ||
+          status.includes("processing") ||
+          status.includes("dispatch")
+        );
+      }),
+    [allOrders]
+  );
+
+  const packingCount = useMemo(
+    () =>
+      allOrders.filter((order) =>
+        statusOf(
+          order?.deliveryStatus ||
+            order?.orderStatus ||
+            order?.status
+        ).includes("packing")
+      ).length,
+    [allOrders]
+  );
+
+  const stockAlerts = useMemo(() => {
+    if (!Array.isArray(allProduct)) return [];
+
+    return allProduct
+      .map((product) => ({
+        ...product,
+        stockValue: getStock(product),
+      }))
+      .filter((product) => product.stockValue <= 3)
+      .sort((a, b) => a.stockValue - b.stockValue)
+      .slice(0, 5);
+  }, [allProduct]);
+
+  // 🔽 Recent orders – now uses the selected tab (default "paid")
+  const recentOrders = useMemo(() => {
+    const list =
+      orderTab === "paid"
+        ? paidOrders
+        : orderTab === "pending"
+        ? pendingOrders
+        : orderTab === "failed"
+        ? failedOrders
+        : allOrders;
+
+    return [...list]
+      .sort((a, b) => b.orderDate - a.orderDate)
+      .slice(0, 7);
+  }, [
+    orderTab,
+    allOrders,
+    paidOrders,
+    pendingOrders,
+    failedOrders,
+  ]);
+
+  const goToOrders = useCallback(() => {
+       setTab(3);
+     }, [setTab]);
+
+    const goToUpload = useCallback(() => {
+       setTab(4);
+     }, [setTab]);
+
+  const exportDashboardData = async () => {
+    try {
+      setExporting(true);
+
+      const rows = [
+        ["DARSH Dashboard Analytics"],
+        ["Export Date", new Date().toLocaleString("en-IN")],
+        ["Revenue", totalRevenue],
+        ["Orders", totalOrders],
+        ["Products", totalProducts],
+        ["Users", totalUsers],
+        ["Average Order Value", avgOrderValue],
+        ["Payment Success Rate", `${paymentSuccessRate.toFixed(1)}%`],
+        ["Revenue Growth", `${revenueGrowth.toFixed(1)}%`],
+        ["Order Growth", `${orderGrowth.toFixed(1)}%`],
+      ];
+
+      const csv = rows
+        .map((row) =>
+          row
+            .map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`)
+            .join(",")
+        )
+        .join("\n");
+
+      const blob = new Blob([csv], {
+        type: "text/csv;charset=utf-8;",
+      });
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `darsh-dashboard-${new Date()
+        .toISOString()
+        .slice(0, 10)}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Export error:", error);
+    } finally {
+      setTimeout(() => setExporting(false), 400);
+    }
+  };
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-6 bg-gray-50">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-orange-500"></div>
+      <div className="min-h-screen bg-[#0b0b0b] px-4 py-6 text-white sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-[1600px] animate-pulse space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="h-9 w-48 rounded-lg bg-white/[0.06]" />
+              <div className="mt-3 h-4 w-72 rounded bg-white/[0.04]" />
+            </div>
+            <div className="h-11 w-40 rounded-xl bg-white/[0.06]" />
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {[1, 2, 3, 4].map((item) => (
+              <div
+                key={item}
+                className="h-40 rounded-2xl border border-white/[0.06] bg-[#171717]"
+              />
+            ))}
+          </div>
+
+          <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
+            <div className="h-[430px] rounded-2xl bg-[#171717] xl:col-span-2" />
+            <div className="h-[430px] rounded-2xl bg-[#171717]" />
+          </div>
+
+          <div className="fixed inset-0 flex items-center justify-center">
+            <div className="flex items-center gap-3 rounded-full border border-white/10 bg-[#171717]/95 px-5 py-3 shadow-2xl">
+              <Loader2
+                size={18}
+                className="animate-spin text-amber-400"
+              />
+              <span className="text-sm text-white">
+                Loading DARSH dashboard...
+              </span>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      {/* Enhanced Header with Action Buttons */}
-      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
-        <div className="flex items-center gap-4 flex-1">
-  <div className="block md:hidden p-2 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-2xl shadow-lg animate-pulse">
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      className="h-8 w-8 text-white"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      strokeWidth={2}
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M3 13h8V3H3v10zm10 8h8v-6h-8v6zM3 21h8v-4H3v4zm10-8h8V3h-8v10z"
-      />
-    </svg>
-  </div>
+    <div className="min-h-screen bg-[#0b0b0b] px-4 py-5 text-white sm:px-6 lg:px-8">
+      <style>{`
+        @keyframes fadeUp {
+          from { opacity: 0; transform: translateY(14px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes shimmer {
+          0% { transform: translateX(-120%); }
+          100% { transform: translateX(120%); }
+        }
+        .dashboard-scroll::-webkit-scrollbar { width: 5px; height: 5px; }
+        .dashboard-scroll::-webkit-scrollbar-track { background: transparent; }
+        .dashboard-scroll::-webkit-scrollbar-thumb { background: #303030; border-radius: 999px; }
+      `}</style>
 
-  <div>
-    <h1 className="text-xl lg:text-3xl whitespace-nowrap font-bold text-gray-900 bg-gradient-to-r from-indigo-600 to-pink-500 bg-clip-text text-transparent">
-      Dashboard Analytics
-    </h1>
-    <p className="text-xs md:text-sm text-gray-600">Complete overview of your store performance</p>
-  </div>
-</div>
+      <div className="mx-auto max-w-[1600px]">
+        {/* Header */}
+        <header className="mb-7 flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
+          <div>
+            <div className="flex items-center gap-3">
+              <div>
+                <h1 className="text-[30px] font-bold tracking-tight text-white sm:text-[38px]">
+                  Dashboard
+                </h1>
+                <p className="mt-1 text-sm text-[#858585]">
+                  {paidOrders.length} orders · {totalProducts} products in the
+                  DARSH catalogue
+                </p>
+              </div>
 
-        
-        {/* Action Buttons Group */}
-        <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
-          {/* Export Button */}
-          <button
-            onClick={exportDashboardData}
-            disabled={exporting}
-            className={`
-              relative flex items-center justify-center gap-2 md:gap-3 px-4 md:px-6 py-3 md:py-4 rounded-xl md:rounded-2xl font-semibold text-sm md:text-base
-              transition-all duration-500 ease-out transform hover:scale-105 hover:shadow-2xl
-              ${exporting 
-                ? 'bg-gradient-to-r from-purple-500 to-indigo-500 text-white shadow-lg' 
-                : 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white hover:from-purple-700 hover:to-indigo-700 shadow-lg hover:shadow-purple-500/25'
-              }
-              overflow-hidden group
-            `}
-          >
-            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -skew-x-12 transform translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
-            
-            <div className="relative flex items-center gap-2 md:gap-3">
-              {exporting ? (
-                <>
-                  <div className="animate-spin">
-                    <RefreshCw className="w-4 h-4 md:w-5 md:h-5" />
-                  </div>
-                  <span className="text-xs md:text-sm">Exporting...</span>
-                </>
-              ) : (
-                <>
-                  <Download className="w-4 h-4 md:w-5 md:h-5 transition-transform group-hover:scale-110" />
-                  <span className="text-xs md:text-sm">Export Data</span>
-                  <BarChart3 className="w-3 h-3 md:w-4 md:h-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                </>
-              )}
+              <div className="hidden h-8 w-8 items-center justify-center rounded-lg bg-amber-500/10 text-amber-400 sm:flex">
+                <Sparkles size={17} />
+              </div>
             </div>
-          </button>
+          </div>
 
-          {/* Refresh Button */}
-          <button
-            onClick={refreshData}
-            disabled={refreshing}
-            className={`
-              relative flex items-center justify-center gap-2 md:gap-3 px-4 md:px-6 py-3 md:py-4 rounded-xl md:rounded-2xl font-semibold text-sm md:text-base
-              transition-all duration-500 ease-out transform hover:scale-105 hover:shadow-2xl
-              ${refreshing
-                ? 'bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-lg'
-                : refreshPulse
-                ? 'bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-lg ring-2 ring-blue-300 ring-opacity-50'
-                : 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700 shadow-lg hover:shadow-blue-500/25'
-              }
-              overflow-hidden group
-            `}
-          >
-            {refreshPulse && !refreshing && (
-              <div className="absolute inset-0 bg-gradient-to-r from-blue-400 to-indigo-400 rounded-2xl animate-pulse" />
-            )}
-            
-            <div className="relative flex items-center gap-2 md:gap-3">
-              <RefreshCw 
-                className={`w-4 h-4 md:w-5 md:h-5 transition-all duration-300 ${
-                  refreshing ? 'animate-spin' : refreshPulse ? 'animate-bounce' : 'group-hover:rotate-180'
-                }`} 
-              />
-              <span className="text-xs md:text-sm">
-                {refreshing ? 'Refreshing...' : refreshPulse ? 'New Data!' : 'Refresh'}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="hidden items-center gap-2 rounded-xl border border-white/[0.08] bg-[#141414] px-4 py-3 lg:flex">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-50" />
+                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400" />
+              </span>
+              <span className="text-xs font-medium text-[#9a9a9a]">
+                Live analytics
               </span>
             </div>
-            
-            <div className="absolute -top-1 -right-1">
-              <div className={`w-2 h-2 rounded-full ${
-                refreshing ? 'bg-yellow-400 animate-ping' : 
-                refreshPulse ? 'bg-green-400 animate-pulse' : 
-                'bg-green-400'
-              }`} />
-            </div>
-          </button>
 
-         {/* Time Range Selector */}
-<div className="relative flex items-center gap-3 bg-gradient-to-r from-indigo-50 via-white to-blue-50 rounded-xl shadow-md p-3 border border-indigo-100 transition-all duration-300 hover:shadow-lg">
-  <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-gradient-to-r from-blue-500 to-indigo-500 shadow-sm">
-    <Calendar size={18} className="text-white" />
-  </div>
-
-  <div className="flex flex-col">
-    <label className="text-xs text-gray-500 font-medium tracking-wide">
-      Select Duration
-    </label>
-    <select
-      value={timeRange}
-      onChange={(e) => setTimeRange(e.target.value)}
-      className="bg-transparent text-sm font-semibold text-gray-700 focus:outline-none focus:ring-0 appearance-none cursor-pointer hover:text-blue-600 transition-colors"
-    >
-      <option value="week">📅 Last 7 Days</option>
-      <option value="month">📆 Last 6 Months</option>
-      <option value="year">📊 Last 12 Months</option>
-    </select>
-  </div>
-
-  {/* Decorative dropdown arrow */}
-  <div className="absolute right-3 text-indigo-400 pointer-events-none">
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      className="w-4 h-4"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      strokeWidth={2}
-    >
-      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-    </svg>
-  </div>
-</div>
-
-        </div>
-      </div>
-
-      {/* Results Count */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-        <div>
-          <p className="text-sm text-gray-600">
-            Showing analytics for {timeRange === 'week' ? 'last 7 days' : timeRange === 'month' ? 'last 6 months' : 'last 12 months'}
-          </p>
-          {mobileView && (
-            <span className="block text-xs text-blue-600 font-medium mt-1">
-              Mobile-optimized dashboard
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2 text-sm text-blue-600 font-medium">
-          <div className={`w-2 h-2 rounded-full ${refreshing ? 'bg-yellow-400 animate-pulse' : 'bg-green-400'}`} />
-          <span>Live Analytics Updates</span>
-        </div>
-      </div>
-
-      {/* Today's Quick Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-2">
-        <div className="bg-gradient-to-r from-green-50 to-green-100 p-4 rounded-xl shadow border border-green-200">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs text-gray-600">Today Revenue</p>
-              <p className="text-lg font-bold text-green-700">{formatCurrency(todaysRevenue)}</p>
-            </div>
-            <TrendingUp className="text-green-600" size={20} />
-          </div>
-        </div>
-        <div className="bg-gradient-to-r from-blue-50 to-blue-100 p-4 rounded-xl shadow border border-blue-200">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs text-gray-600">Today's Orders</p>
-              <p className="text-lg font-bold text-blue-700">{todaysPaidOrders.length}</p>
-            </div>
-            <ShoppingBag className="text-blue-600" size={20} />
-          </div>
-        </div>
-        <div className="bg-gradient-to-r from-purple-50 to-purple-100 p-4 rounded-xl shadow border border-purple-200">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs text-gray-600">Success Rate</p>
-              <p className="text-lg font-bold text-purple-700">{paymentSuccessRate}%</p>
-            </div>
-            <CheckCircle className="text-purple-600" size={20} />
-          </div>
-        </div>
-        <div className="bg-gradient-to-r from-orange-50 to-orange-100 p-4 rounded-xl shadow border border-orange-200">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs text-gray-600">Avg. Order</p>
-              <p className="text-lg font-bold text-orange-700">{formatCurrency(avgOrderValue)}</p>
-            </div>
-            <LineChart className="text-orange-600" size={20} />
-          </div>
-        </div>
-      </div>
-
-     {/* Stats Cards */}
-<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-  {stats.map((stat, index) => (
-    <div
-      key={index}
-      className="relative overflow-hidden bg-gradient-to-br from-white to-indigo-50 rounded-2xl shadow-md p-5 flex items-center justify-between transition-all duration-500 hover:scale-[1.02] hover:shadow-xl"
-    >
-      {/* Gradient background accent */}
-      <div className="absolute inset-0 opacity-10 bg-gradient-to-r from-blue-400 via-indigo-500 to-purple-500 pointer-events-none"></div>
-
-      <div className="flex items-center space-x-4 z-10">
-        {/* Icon container with glow effect */}
-        <div
-          className={`p-3 rounded-2xl shadow-md ${stat.bg} transition-transform duration-500 transform group-hover:rotate-12`}
-        >
-          <stat.icon
-            className={`h-7 w-7 ${stat.color} drop-shadow-md transition-all duration-300`}
-          />
-        </div>
-
-        <div>
-          <p className="text-gray-600 text-sm font-medium tracking-wide">
-            {stat.name}
-          </p>
-          <p className="text-xl font-extrabold text-gray-900 mt-1">
-            {stat.value}
-          </p>
-
-          {stat.growth !== undefined && (
-            <div
-              className={`flex items-center text-xs mt-1 font-semibold ${
-                stat.growth >= 0 ? "text-green-600" : "text-red-600"
-              }`}
+            <button
+              type="button"
+              onClick={refreshData}
+              disabled={refreshing}
+              className="group flex h-11 items-center gap-2 rounded-xl border border-white/[0.09] bg-[#151515] px-4 text-sm font-medium text-[#c9c9c9] transition hover:border-amber-500/30 hover:bg-[#1b1b1b] hover:text-white disabled:opacity-60"
             >
-              {stat.growth >= 0 ? (
-                <ArrowUp size={13} className="mr-1" />
-              ) : (
-                <ArrowDown size={13} className="mr-1" />
-              )}
-              <span>
-                {Math.abs(stat.growth).toFixed(1)}% {stat.period}
+              <RefreshCw
+                size={16}
+                className={
+                  refreshing
+                    ? "animate-spin text-amber-400"
+                    : "transition-transform duration-500 group-hover:rotate-180"
+                }
+              />
+              <span className="hidden sm:inline">
+                {refreshing ? "Refreshing..." : "Refresh"}
               </span>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  ))}
-</div>
+            </button>
 
+            <button
+              type="button"
+              onClick={() => {
+                goToOrders();
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }}
+              className="flex h-11 items-center gap-2 rounded-xl border border-white/[0.1] bg-[#151515] px-5 text-sm font-medium text-white transition hover:border-white/20 hover:bg-[#202020]"
+            >
+              <ShoppingBag size={17} />
+              View orders
+            </button>
 
-      {/* Order Summary */}
-      <div className="bg-white rounded-xl shadow-sm p-5 mb-6">
-        <h2 className="text-lg font-semibold text-gray-800 mb-4">Orders Summary</h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                goToUpload();
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }}
+              className="group relative flex h-11 items-center gap-2 overflow-hidden rounded-xl bg-[#f5a90b] px-5 text-sm font-semibold text-black shadow-[0_8px_30px_rgba(245,169,11,.16)] transition hover:-translate-y-0.5 hover:bg-[#ffb51b] hover:shadow-[0_12px_35px_rgba(245,169,11,.24)]"
+            >
+              <PackageOpen size={17} />
+              Upload product
+              <span className="absolute inset-0 -translate-x-full skew-x-[-15deg] bg-white/20 transition-transform duration-700 group-hover:translate-x-full" />
+            </button>
+          </div>
+        </header>
+
+        {/* KPI */}
+        <section className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard
+            title={`Revenue (${range}D)`}
+            value={rangeRevenue}
+            currencyValue
+            icon={IndianRupee}
+            growth={revenueGrowth}
+            subtitle="vs previous period"
+            delay={50}
+          />
+          <StatCard
+            title={`Orders (${range}D)`}
+            value={rangeOrders.length}
+            icon={ShoppingBag}
+            growth={orderGrowth}
+            subtitle="vs previous period"
+            delay={100}
+          />
+          <StatCard
+            title="Avg order value"
+            value={avgOrderValue}
+            currencyValue
+            icon={TrendingUp}
+            accent="blue"
+            subtitle={`last ${range} days`}
+            delay={150}
+          />
+          <StatCard
+            title="Awaiting dispatch"
+            value={awaitingDispatch.length}
+            icon={Truck}
+            subtitle={`${packingCount} packing`}
+            delay={200}
+          />
+        </section>
+
+        {/* Today mini stats */}
+        <section className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
           {[
-            { key: 'all', label: 'All Orders', icon: ShoppingBag },
-            { key: 'paid', label: 'Paid', icon: CheckCircle },
-            { key: 'pending', label: 'Pending', icon: AlertCircle },
-            { key: 'failed', label: 'Failed', icon: XCircle },
-          ].map((tab) => (
+            [
+              "Today revenue",
+              currency(todayRevenue),
+              IndianRupee,
+              "text-amber-400",
+            ],
+            ["Today orders", todayOrders, ShoppingBag, "text-blue-400"],
+            [
+              "Success rate",
+              `${paymentSuccessRate.toFixed(1)}%`,
+              CheckCircle2,
+              "text-emerald-400",
+            ],
+            ["Total users", totalUsers, Users, "text-purple-400"],
+          ].map(([label, value, Icon, color]) => (
             <div
-              key={tab.key}
-              role="button"
-              tabIndex={0}
-              onClick={() => setActiveOrderTab(tab.key)}
-              onKeyDown={(e) => (e.key === 'Enter' ? setActiveOrderTab(tab.key) : null)}
-              className={`p-4 rounded-lg cursor-pointer transition-all ${activeOrderTab === tab.key ? "bg-blue-50 border border-blue-200" : "bg-gray-50 hover:bg-gray-100"}`}
+              key={label}
+              className="group rounded-xl border border-white/[0.06] bg-[#121212] px-4 py-3.5 transition hover:border-white/[0.12] hover:bg-[#151515]"
             >
               <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600">{tab.label}</span>
-                <tab.icon size={16} className="text-gray-500" />
+                <div>
+                  <p className="text-[10px] uppercase tracking-[0.12em] text-[#686868]">
+                    {label}
+                  </p>
+                  <p className={`mt-1 text-base font-bold ${color}`}>{value}</p>
+                </div>
+                <Icon
+                  size={18}
+                  className={`${color} opacity-70 transition group-hover:scale-110`}
+                />
               </div>
-              <p className="text-xl font-bold text-gray-900 mt-1">{orderStatusCounts[tab.key]}</p>
             </div>
           ))}
-        </div>
-      </div>
+        </section>
 
-      {/* Charts Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-        {/* Sales Chart */}
-        <div className="lg:col-span-2 bg-white rounded-xl shadow-sm p-5">
-          <div className="flex flex-col md:flex-row md:items-center justify-between mb-6">
-            <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-              <TrendingUp className="text-orange-500" /> Sales Overview
-            </h2>
-            <div className="text-sm text-gray-500 mt-1 md:mt-0">
-              {timeRange === 'week' ? 'Last 7 Days' : timeRange === 'month' ? 'Last 6 Months' : 'Last 12 Months'}
-            </div>
-          </div>
-          <div className="h-72">
-            <Line data={salesChartData} options={chartOptions} />
-          </div>
-        </div>
+        {/* Main charts */}
+        <section className="grid grid-cols-1 gap-5 xl:grid-cols-3">
+          <Card className="p-5 sm:p-6 xl:col-span-2">
+            <div className="absolute -right-24 -top-24 h-60 w-60 rounded-full bg-amber-500/[0.035] blur-3xl" />
 
-        {/* Recent Orders */}
-        <div className="bg-white rounded-xl shadow-sm p-5">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-              <CreditCard size={20} className="text-blue-500" /> Recent Orders
-            </h2>
-            <Filter size={18} className="text-gray-400" />
-          </div>
-          <div className="space-y-4 max-h-72 overflow-y-auto pr-2">
-            {filteredOrders.length > 0 ? (
-              filteredOrders
-                .slice()
-                .sort((a, b) => getOrderDate(b) - getOrderDate(a))
-                .slice(0, 8)
-                .map((order) => (
-                  <div
-                    key={order._id}
-                    className="flex items-center justify-between p-3 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors"
+            <div className="relative mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg font-bold">Revenue trend</h2>
+                  <TrendingUp size={17} className="text-amber-400" />
+                </div>
+                <p className="mt-1 text-xs text-[#777]">
+                  Daily GST-inclusive sales, last {range} days
+                </p>
+              </div>
+
+              <div className="flex items-center gap-4">
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setRangeOpen((v) => !v)}
+                    className="flex items-center gap-2 rounded-lg border border-white/[0.08] bg-[#111] px-3 py-2 text-xs text-[#a1a1a1] transition hover:border-amber-500/20 hover:text-white"
                   >
-                    <div className="flex items-center space-x-3">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${order.statusBg}`}>
-                        {order.payStatusNormalized === "paid" ? (
-                          <CheckCircle size={16} className="text-green-600" />
-                        ) : order.payStatusNormalized === "failed" ? (
-                          <XCircle size={16} className="text-red-600" />
-                        ) : (
-                          <AlertCircle size={16} className="text-yellow-600" />
-                        )}
+                    <CalendarDays size={14} />
+                    {range} Days
+                    <ChevronDown size={13} />
+                  </button>
+
+                  {rangeOpen && (
+                    <div className="absolute right-0 top-full z-30 mt-2 w-32 overflow-hidden rounded-xl border border-white/[0.08] bg-[#1b1b1b] p-1 shadow-2xl">
+                      {[7, 30, 90].map((item) => (
+                        <button
+                          key={item}
+                          type="button"
+                          onClick={() => {
+                            setRange(item);
+                            setRangeOpen(false);
+                          }}
+                          className={`flex w-full rounded-lg px-3 py-2 text-left text-xs transition ${
+                            range === item
+                              ? "bg-amber-500/10 text-amber-400"
+                              : "text-[#999] hover:bg-white/[0.05] hover:text-white"
+                          }`}
+                        >
+                          {item} Days
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="text-right">
+                  <p className="text-[11px] text-[#696969]">Total</p>
+                  <p className="text-xl font-bold text-amber-400">
+                    {currency(rangeRevenue)}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="h-[300px] sm:h-[340px]">
+              <Line data={revenueData} options={revenueOptions} />
+            </div>
+
+            <div className="mt-5 flex items-center justify-between border-t border-white/[0.06] pt-4">
+              <div className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-amber-400 shadow-[0_0_10px_rgba(245,158,11,.6)]" />
+                <span className="text-xs text-[#737373]">Revenue</span>
+              </div>
+
+              <div className="flex items-center gap-1.5 text-xs">
+                {revenueGrowth >= 0 ? (
+                  <ArrowUpRight size={14} className="text-emerald-400" />
+                ) : (
+                  <ArrowDownRight size={14} className="text-rose-400" />
+                )}
+                <span
+                  className={
+                    revenueGrowth >= 0 ? "text-emerald-400" : "text-rose-400"
+                  }
+                >
+                  {Math.abs(revenueGrowth).toFixed(1)}%
+                </span>
+                <span className="text-[#656565]">vs previous</span>
+              </div>
+            </div>
+          </Card>
+
+          <Card className="p-5 sm:p-6">
+            <div className="mb-5">
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-bold">Revenue by category</h2>
+                <PieChart size={17} className="text-amber-400" />
+              </div>
+              <p className="mt-1 text-xs text-[#777]">
+                Share of products in catalogue
+              </p>
+            </div>
+
+            <div className="relative mx-auto h-[270px] max-w-[300px]">
+              {categoryEntries.length ? (
+                <>
+                  <Doughnut data={categoryData} options={categoryOptions} />
+                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                    <div className="text-center">
+                      <p className="text-3xl font-bold">{totalProducts}</p>
+                      <p className="mt-1 text-[10px] uppercase tracking-[.15em] text-[#737373]">
+                        Products
+                      </p>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="flex h-full items-center justify-center text-sm text-[#666]">
+                  No category data
+                </div>
+              )}
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3">
+              {categoryEntries.map(([name, value], index) => (
+                <div key={name} className="flex min-w-0 items-center gap-2">
+                  <span
+                    className="h-2.5 w-2.5 shrink-0 rounded-full"
+                    style={{
+                      backgroundColor:
+                        categoryColors[index % categoryColors.length],
+                    }}
+                  />
+                  <span className="truncate text-[11px] text-[#8a8a8a]">
+                    {name}
+                  </span>
+                  <span className="ml-auto text-[11px] font-semibold text-[#b8b8b8]">
+                    {value}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </Card>
+        </section>
+
+        {/* Screenshot-style middle analytics */}
+        <section className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-3">
+          <Card className="p-5 sm:p-6">
+            <div className="mb-5">
+              <h2 className="text-lg font-bold">Daily product uploads</h2>
+              <p className="mt-1 text-xs text-[#707070]">
+                Catalogue activity, last 14 days
+              </p>
+            </div>
+            <div className="h-[290px]">
+              <Bar data={uploadChartData} options={uploadChartOptions} />
+            </div>
+          </Card>
+
+          <Card className="p-5 sm:p-6">
+            <div className="mb-5">
+              <h2 className="text-lg font-bold">Orders per day</h2>
+              <p className="mt-1 text-xs text-[#707070]">
+                Paid order volume, last 14 days
+              </p>
+            </div>
+            <div className="h-[290px]">
+              <Bar data={orderBarData} options={orderBarOptions} />
+            </div>
+          </Card>
+
+          <Card className="p-5 sm:p-6">
+            <div className="mb-5 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-bold">Best sellers</h2>
+                <p className="mt-1 text-xs text-[#707070]">By revenue</p>
+              </div>
+              <Star size={18} className="text-amber-400" />
+            </div>
+
+            <div className="space-y-4">
+              {topProducts.length ? (
+                topProducts.slice(0, 6).map((product, index) => (
+                  <div
+                    key={product.id}
+                    className="group flex items-center gap-3"
+                  >
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-xs font-bold text-amber-400">
+                      {index + 1}
+                    </div>
+
+                    {product.image ? (
+                      <img
+                        src={product.image}
+                        alt={product.name}
+                        className="h-10 w-10 shrink-0 rounded-lg border border-white/[0.08] object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white/[0.04] text-[#666]">
+                        <Package size={17} />
                       </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">Order #{String(order._id).substring(0, 8)}...</p>
-                        <p className="text-xs text-gray-500">{getOrderDate(order).toLocaleString()}</p>
+                    )}
+
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-xs font-medium text-[#dedede]">
+                        {product.name}
+                      </p>
+                      <div className="mt-1 h-1 overflow-hidden rounded-full bg-white/[0.05]">
+                        <div
+                          className="h-full rounded-full bg-amber-500 transition-all duration-700"
+                          style={{
+                            width: `${
+                              topProducts[0]?.revenue
+                                ? Math.max(
+                                    8,
+                                    (product.revenue / topProducts[0].revenue) *
+                                      100,
+                                  )
+                                : 0
+                            }%`,
+                          }}
+                        />
                       </div>
                     </div>
-                    <div className="text-right">
-                      <span className="text-sm font-semibold text-gray-900">{formatCurrency(order.amount)}</span>
-                      <p className={`text-xs ${order.statusColor}`}>{order.payStatusNormalized.charAt(0).toUpperCase() + order.payStatusNormalized.slice(1)}</p>
-                    </div>
+
+                    <span className="shrink-0 text-xs font-semibold text-white">
+                      {compactCurrency(product.revenue)}
+                    </span>
                   </div>
                 ))
-            ) : (
-              <p className="text-gray-500 text-center py-4">No orders found</p>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Second Row */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
-        {/* User Growth */}
-        <div className="bg-white rounded-xl shadow-sm p-5">
-          <h2 className="text-lg font-semibold text-gray-800 mb-6">User Growth</h2>
-          <div className="h-56 mb-4">
-            <Bar data={userChartData} options={{...chartOptions, plugins: {...chartOptions.plugins, legend: {display:false}}}} />
-          </div>
-          <div className="flex items-center justify-between">
-            <p className="text-gray-600 text-sm">Total: <span className="font-bold">{totalUsers}</span></p>
-            <div className={`flex items-center text-xs ${userGrowth >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-              {userGrowth >= 0 ? <ArrowUp size={14} /> : <ArrowDown size={14} />}
-              <span>{Math.abs(userGrowth).toFixed(1)}%</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Product Categories */}
-        <div className="bg-white rounded-xl shadow-sm p-5">
-          <h2 className="text-lg font-semibold text-gray-800 mb-6 flex items-center gap-2"><PieChart size={20} className="text-purple-500" /> Product Categories</h2>
-          <div className="h-56 flex items-center justify-center">
-            {Object.keys(processChartData.categoryData).length > 0 ? (
-              <Doughnut data={categoryChartData} options={{...chartOptions, plugins:{...chartOptions.plugins, legend:{position:'bottom'}}}} />
-            ) : (
-              <p className="text-gray-500">No category data available</p>
-            )}
-          </div>
-        </div>
-
-        {/* Top Products */}
-        <div className="bg-white rounded-xl shadow-sm p-5">
-          <h2 className="text-lg font-semibold text-gray-800 mb-6 flex items-center gap-2"><Star className="text-yellow-500" /> Top Products</h2>
-          <div className="space-y-4">
-            {topProducts.length > 0 ? (
-              topProducts.map((product, index) => (
-                <div key={product.id} className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center">
-                      <span className="text-xs font-bold text-orange-600">{index + 1}</span>
-                    </div>
-                    <span className="text-sm text-gray-700 truncate max-w-[160px]">{product.name}</span>
-                  </div>
-                  <span className="text-sm font-semibold text-gray-900">{formatCurrency(product.revenue)}</span>
+              ) : (
+                <div className="flex h-64 items-center justify-center text-sm text-[#666]">
+                  No product sales yet
                 </div>
-              ))
-            ) : (
-              <p className="text-gray-500 text-center py-4">No product data available</p>
-            )}
-          </div>
-        </div>
-      </div>
+              )}
+            </div>
+          </Card>
+        </section>
 
-      {/* Metrics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Average Order Value */}
-        <div className="bg-white rounded-xl shadow-sm p-5 text-center">
-          <div className="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-3">
-            <ShoppingBag size={20} className="text-indigo-600" />
-          </div>
-          <h3 className="text-sm text-gray-600 mb-1">Avg. Order Value</h3>
-          <p className="text-xl font-bold text-indigo-600">{formatCurrency(avgOrderValue)}</p>
-          <p className="text-xs text-gray-500 mt-1">Across {totalOrders} orders</p>
-        </div>
+        {/* Orders + stock */}
+        <section className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-3">
+          <Card className="xl:col-span-2">
+            <div className="flex flex-col gap-4 border-b border-white/[0.06] p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+              <div>
+                <h2 className="text-lg font-bold">Recent orders</h2>
+                <p className="mt-1 text-xs text-[#707070]">
+                  Latest customer activity
+                </p>
+              </div>
 
-        {/* Payment Success Rate */}
-        <div className="bg-white rounded-xl shadow-sm p-5 text-center">
-          <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
-            <CreditCard size={20} className="text-green-600" />
-          </div>
-          <h3 className="text-sm text-gray-600 mb-1">Payment Success Rate</h3>
-          <p className="text-xl font-bold text-green-600">{paymentSuccessRate}%</p>
-          <p className="text-xs text-gray-500 mt-1">{paidOrders.length} of {allOrders.length} orders</p>
-        </div>
+              <button
+                type="button"
+                onClick={() => {
+                goToOrders();
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }}
+                className="flex items-center gap-1.5 text-xs font-medium text-amber-400 transition hover:text-amber-300"
+              >
+                See all
+                <ArrowUpRight size={13} />
+              </button>
+            </div>
 
-        {/* Conversion Rate */}
-        <div className="bg-white rounded-xl shadow-sm p-5 text-center">
-          <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3">
-            <TrendingUp size={20} className="text-blue-600" />
-          </div>
-          <h3 className="text-sm text-gray-600 mb-1">Conversion Rate</h3>
-          <p className="text-xl font-bold text-blue-600">{totalUsers > 0 ? ((totalOrders / totalUsers) * 100).toFixed(1) : 0}%</p>
-          <p className="text-xs text-gray-500 mt-1">Orders per user</p>
-        </div>
+            <div className="flex gap-2 overflow-x-auto border-b border-white/[0.06] px-5 py-3 sm:px-6">
+              {[
+                ["paid", "Paid", paidOrders.length],
+                ["pending", "Pending", pendingOrders.length],
+                ["failed", "Failed", failedOrders.length],
+                ["all", "All", allOrders.length],
+              ].map(([key, label, count]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setOrderTab(key)}
+                  className={`rounded-full px-3 py-1.5 text-[11px] font-medium transition ${
+                    orderTab === key
+                      ? "bg-amber-500/10 text-amber-400"
+                      : "text-[#777] hover:bg-white/[0.04] hover:text-white"
+                  }`}
+                >
+                  {label} {count}
+                </button>
+              ))}
+            </div>
 
-        {/* Inventory Status */}
-        <div className="bg-white rounded-xl shadow-sm p-5 text-center">
-          <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-3">
-            <Package size={20} className="text-orange-600" />
+            <div className="dashboard-scroll overflow-x-auto">
+              <div className="min-w-[650px]">
+                <div className="grid grid-cols-[1.6fr_1fr_1fr_.8fr] gap-4 border-b border-white/[0.06] px-5 py-3 text-[10px] uppercase tracking-[.12em] text-[#5f5f5f] sm:px-6">
+                  <span>Order</span>
+                  <span>Date</span>
+                  <span>Amount</span>
+                  <span>Status</span>
+                </div>
+
+                <div className="divide-y divide-white/[0.05]">
+                  {recentOrders.length ? (
+                    recentOrders.map((order, index) => {
+                      const paid =
+                        order.normalizedStatus === "paid" ||
+                        order.normalizedStatus === "payment successful";
+                      const failed =
+                        order.normalizedStatus === "failed" ||
+                        order.normalizedStatus === "cancelled";
+
+                      return (
+                        <div
+                          key={order?._id || order?.id || index}
+                          className="grid grid-cols-[1.6fr_1fr_1fr_.8fr] items-center gap-4 px-5 py-4 transition hover:bg-white/[0.025] sm:px-6"
+                        >
+                          <div className="flex min-w-0 items-center gap-3">
+                            <div
+                              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
+                                paid
+                                  ? "bg-emerald-500/10 text-emerald-400"
+                                  : failed
+                                    ? "bg-rose-500/10 text-rose-400"
+                                    : "bg-amber-500/10 text-amber-400"
+                              }`}
+                            >
+                              {paid ? (
+                                <CheckCircle2 size={17} />
+                              ) : failed ? (
+                                <XCircle size={17} />
+                              ) : (
+                                <Clock3 size={17} />
+                              )}
+                            </div>
+
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium text-white">
+                                Order #
+                                {String(order?._id || order?.id || "N/A").slice(
+                                  0,
+                                  10,
+                                )}
+                              </p>
+                              <p className="mt-0.5 text-[10px] text-[#656565]">
+                                {order.itemCount} items
+                              </p>
+                            </div>
+                          </div>
+
+                          <span className="text-xs text-[#777]">
+                            {order.orderDate.toLocaleDateString("en-IN", {
+                              day: "2-digit",
+                              month: "short",
+                            })}
+                          </span>
+
+                          <span className="text-sm font-semibold text-white">
+                            {currency(order?.amount)}
+                          </span>
+
+                          <span
+                            className={`inline-flex w-fit rounded-full px-2.5 py-1 text-[10px] font-semibold ${
+                              paid
+                                ? "bg-emerald-500/10 text-emerald-400"
+                                : failed
+                                  ? "bg-rose-500/10 text-rose-400"
+                                  : "bg-amber-500/10 text-amber-400"
+                            }`}
+                          >
+                            {paid ? "Paid" : failed ? "Failed" : "Pending"}
+                          </span>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="py-14 text-center text-sm text-[#666]">
+                      No orders found
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </Card>
+
+          {/* 🔽 Enhanced Stock Alerts Card with Refresh Button & Timestamps */}
+          <Card className="p-5 sm:p-6">
+            <div className="mb-5 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400">
+                  <AlertTriangle size={20} />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold">Stock alerts</h2>
+                  <p className="mt-1 text-xs text-[#707070]">
+                    {stockAlerts.filter((p) => p.stockValue === 0).length} out
+                    of stock ·{" "}
+                    {
+                      stockAlerts.filter(
+                        (p) => p.stockValue > 0 && p.stockValue <= 3,
+                      ).length
+                    }{" "}
+                    running low
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={refreshData}
+                disabled={refreshing}
+                className="text-amber-400 hover:text-amber-300 transition disabled:opacity-50"
+                title="Refresh stock data"
+              >
+                <RefreshCw
+                  size={16}
+                  className={refreshing ? "animate-spin" : ""}
+                />
+              </button>
+            </div>
+
+            <div className="space-y-1">
+              {stockAlerts.length ? (
+                stockAlerts.map((product) => (
+                  <div
+                    key={product?._id || product?.id || product?.productName}
+                    className="flex items-center justify-between rounded-xl px-3 py-3 transition hover:bg-white/[0.035]"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-white">
+                        {product?.productName || "Unnamed product"}
+                      </p>
+                      <p className="mt-0.5 text-[10px] text-[#656565]">
+                        {product?.sku || product?._id || "DARSH product"} ·
+                        Updated:{" "}
+                        {new Date(
+                          product?.updatedAt || product?.createdAt,
+                        ).toLocaleDateString("en-IN", {
+                          day: "2-digit",
+                          month: "short",
+                          year: "numeric",
+                        })}
+                      </p>
+                    </div>
+
+                    <span
+                      className={`shrink-0 text-sm font-bold ${
+                        product.stockValue === 0
+                          ? "text-rose-400"
+                          : "text-amber-400"
+                      }`}
+                    >
+                      {product.stockValue === 0
+                        ? "Out"
+                        : `${product.stockValue} left`}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <div className="flex min-h-[260px] flex-col items-center justify-center text-center">
+                  <CheckCircle2 size={28} className="text-emerald-400" />
+                  <p className="mt-3 text-sm font-medium text-white">
+                    Stock looks healthy
+                  </p>
+                  <p className="mt-1 text-xs text-[#666]">
+                    No low-stock products detected.
+                  </p>
+                </div>
+              )}
+            </div>
+          </Card>
+        </section>
+
+        {/* Bottom analytics */}
+        <section className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-3">
+          <Card className="p-5 sm:p-6">
+            <div className="mb-5 flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-bold">Store performance</h2>
+                <p className="mt-1 text-xs text-[#707070]">
+                  Key business indicators
+                </p>
+              </div>
+              <BarChart3 size={18} className="text-amber-400" />
+            </div>
+
+            <div className="space-y-5">
+              {[
+                [
+                  "Payment success",
+                  paymentSuccessRate,
+                  "bg-emerald-400",
+                  "text-emerald-400",
+                ],
+                [
+                  "Orders / users",
+                  totalUsers
+                    ? Math.min(100, (totalOrders / totalUsers) * 100)
+                    : 0,
+                  "bg-blue-400",
+                  "text-blue-400",
+                ],
+                [
+                  "Products available",
+                  totalProducts ? 100 : 0,
+                  "bg-amber-400",
+                  "text-amber-400",
+                ],
+              ].map(([label, value, bar, text]) => (
+                <div key={label}>
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="text-xs text-[#858585]">{label}</span>
+                    <span className={`text-xs font-semibold ${text}`}>
+                      {Number(value).toFixed(1)}%
+                    </span>
+                  </div>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
+                    <div
+                      className={`h-full rounded-full ${bar} transition-all duration-1000`}
+                      style={{
+                        width: `${Math.min(100, Math.max(0, value))}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+
+          <Card className="p-5 sm:p-6">
+            <div className="mb-5 flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-bold">Customer overview</h2>
+                <p className="mt-1 text-xs text-[#707070]">
+                  Current store snapshot
+                </p>
+              </div>
+              <Users size={18} className="text-purple-400" />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                ["Customers", totalUsers, "text-purple-400"],
+                ["Products", totalProducts, "text-amber-400"],
+                ["Paid orders", totalOrders, "text-emerald-400"],
+                ["Dispatch", awaitingDispatch.length, "text-blue-400"],
+              ].map(([label, value, color]) => (
+                <div
+                  key={label}
+                  className="rounded-xl border border-white/[0.06] bg-[#121212] p-4"
+                >
+                  <p className="text-[10px] uppercase tracking-[.1em] text-[#666]">
+                    {label}
+                  </p>
+                  <p className={`mt-2 text-2xl font-bold ${color}`}>{value}</p>
+                </div>
+              ))}
+            </div>
+          </Card>
+
+          <Card className="p-5 sm:p-6">
+            <div className="mb-5">
+              <h2 className="text-base font-bold">Quick actions</h2>
+              <p className="mt-1 text-xs text-[#707070]">
+                Manage your store faster
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                goToUpload();
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }}
+                className="group rounded-xl border border-white/[0.06] bg-[#121212] p-4 text-left transition hover:-translate-y-0.5 hover:border-amber-500/25 hover:bg-amber-500/[0.04]"
+              >
+                <PackageOpen
+                  size={19}
+                  className="text-amber-400 transition group-hover:scale-110"
+                />
+                <p className="mt-3 text-xs font-semibold">Add product</p>
+                <p className="mt-1 text-[10px] text-[#646464]">
+                  New catalogue item
+                </p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                goToOrders();
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }}
+                className="group rounded-xl border border-white/[0.06] bg-[#121212] p-4 text-left transition hover:-translate-y-0.5 hover:border-blue-500/25 hover:bg-blue-500/[0.04]"
+              >
+                <Eye
+                  size={19}
+                  className="text-blue-400 transition group-hover:scale-110"
+                />
+                <p className="mt-3 text-xs font-semibold">View orders</p>
+                <p className="mt-1 text-[10px] text-[#646464]">
+                  Manage customer orders
+                </p>
+              </button>
+
+              <button
+                type="button"
+                onClick={exportDashboardData}
+                disabled={exporting}
+                className="group rounded-xl border border-white/[0.06] bg-[#121212] p-4 text-left transition hover:-translate-y-0.5 hover:border-purple-500/25 hover:bg-purple-500/[0.04] disabled:opacity-50"
+              >
+                {exporting ? (
+                  <Loader2 size={19} className="animate-spin text-purple-400" />
+                ) : (
+                  <Download
+                    size={19}
+                    className="text-purple-400 transition group-hover:scale-110"
+                  />
+                )}
+                <p className="mt-3 text-xs font-semibold">
+                  {exporting ? "Exporting..." : "Export data"}
+                </p>
+                <p className="mt-1 text-[10px] text-[#646464]">
+                  Download analytics
+                </p>
+              </button>
+
+              <button
+                type="button"
+                onClick={refreshData}
+                disabled={refreshing}
+                className="group rounded-xl border border-white/[0.06] bg-[#121212] p-4 text-left transition hover:-translate-y-0.5 hover:border-emerald-500/25 hover:bg-emerald-500/[0.04] disabled:opacity-50"
+              >
+                <RefreshCw
+                  size={19}
+                  className={`text-emerald-400 ${
+                    refreshing
+                      ? "animate-spin"
+                      : "transition group-hover:rotate-180"
+                  }`}
+                />
+                <p className="mt-3 text-xs font-semibold">Sync data</p>
+                <p className="mt-1 text-[10px] text-[#646464]">
+                  Refresh dashboard
+                </p>
+              </button>
+            </div>
+          </Card>
+        </section>
+
+        <footer className="mt-6 flex flex-col gap-3 border-t border-white/[0.06] py-5 text-xs text-[#5f5f5f] sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2">
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-40" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+            </span>
+            Dashboard connected to live store data
           </div>
-          <h3 className="text-sm text-gray-600 mb-1">Inventory Status</h3>
-          <p className="text-xl font-bold text-orange-600">{totalProducts}</p>
-          <p className="text-xs text-gray-500 mt-1">Products in stock</p>
-        </div>
+          <div>DARSH Admin · {new Date().getFullYear()}</div>
+        </footer>
       </div>
     </div>
   );

@@ -7,8 +7,6 @@ import {
   User,
   Phone,
   Home,
-  Globe,
-  Flag,
   Hash,
   Info,
   Package,
@@ -21,1165 +19,1554 @@ import {
   Share2,
   Copy,
   Eye,
-  BarChart3,
-  Shield,
-  BadgeCheck,
-  Star,
-  Heart,
-  TrendingUp,
   FileText,
   MessageCircle,
+  ChevronDown,
   ChevronRight,
   Play,
   Pause,
-  RotateCcw,
-  MoreVertical
+  MoreVertical,
+  ShieldCheck,
+  ReceiptIndianRupee,
+  Building2,
+  Landmark,
+  Printer,
+  Search,
 } from "lucide-react";
 import axios from "axios";
-import { useState, useRef, useEffect } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAppContext } from "../../context/Context";
 import html2pdf from "html2pdf.js";
 
-const Notification = ({ type, message, onClose }) => {
-  const icons = {
-    success: <CheckCircle className="h-5 w-5 text-green-500" />,
-    error: <XCircle className="h-5 w-5 text-red-500" />,
-    info: <Info className="h-5 w-5 text-blue-500" />,
+/* =========================================================
+   DARSH — ORDER DETAILS
+   Dark admin UI + GST tax invoice / GST pad bill
+   ========================================================= */
+
+const SELLER = {
+  name: "DARSH",
+  address: "6VJG+23H, Ichlabad, Bardhaman, West Bengal 713103, Burdwan, India, 713103",
+  phone: "99078 04710",
+  email: "contactdarsh9@gmail.com",
+  state: "West Bengal",
+  stateCode: "19",
+};
+
+const DEFAULT_SHIPPING = 0;
+
+const money = (value) =>
+  `₹${Number(value || 0).toLocaleString("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+
+const numberValue = (value) => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+};
+
+const firstNumber = (...values) => {
+  for (const value of values) {
+    if (value !== undefined && value !== null && value !== "" && Number.isFinite(Number(value))) {
+      return Number(value);
+    }
+  }
+  return 0;
+};
+
+const formatDate = (date) =>
+  date
+    ? new Date(date).toLocaleDateString("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      })
+    : "—";
+
+const formatDateTime = (date) =>
+  date
+    ? new Date(date).toLocaleString("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : "—";
+
+const statusMeta = (order) => {
+  if (order?.orderReject) {
+    return {
+      label: "Rejected",
+      icon: XCircle,
+      tone: "red",
+      stage: 0,
+    };
+  }
+
+  if (order?.trackingId) {
+    return {
+      label: "Delivered",
+      icon: CheckCircle,
+      tone: "green",
+      stage: 4,
+    };
+  }
+
+  if (order?.orderDispatch) {
+    return {
+      label: "Dispatched",
+      icon: Truck,
+      tone: "amber",
+      stage: 3,
+    };
+  }
+
+  if (order?.orderAccept) {
+    return {
+      label: "Accepted",
+      icon: CheckCircle,
+      tone: "blue",
+      stage: 2,
+    };
+  }
+
+  return {
+    label: "Processing",
+    icon: Clock,
+    tone: "amber",
+    stage: 1,
+  };
+};
+
+const getToneClasses = (tone) => {
+  const map = {
+    green: "bg-emerald-400/10 text-emerald-300 border-emerald-400/20",
+    red: "bg-red-400/10 text-red-300 border-red-400/20",
+    amber: "bg-amber-400/10 text-amber-300 border-amber-400/20",
+    blue: "bg-blue-400/10 text-blue-300 border-blue-400/20",
   };
 
-  const colors = {
-    success: "bg-gradient-to-r from-green-500 to-emerald-500",
-    error: "bg-gradient-to-r from-red-500 to-pink-500",
-    info: "bg-gradient-to-r from-blue-500 to-cyan-500",
+  return map[tone] || map.blue;
+};
+
+const Notification = ({ type, message, onClose }) => {
+  const config = {
+    success: {
+      icon: CheckCircle,
+      color: "text-emerald-300",
+      bar: "from-emerald-400 to-cyan-400",
+    },
+    error: {
+      icon: XCircle,
+      color: "text-red-300",
+      bar: "from-red-400 to-orange-400",
+    },
+    info: {
+      icon: Info,
+      color: "text-blue-300",
+      bar: "from-blue-400 to-violet-400",
+    },
   };
+
+  const item = config[type] || config.info;
+  const Icon = item.icon;
 
   return (
-    <div className="fixed top-4 right-4 z-50 animate-slide-in-up md:max-w-md w-[calc(100%-2rem)]">
-      <div className="bg-white rounded-2xl shadow-2xl overflow-hidden border-0 backdrop-blur-sm bg-white/95">
-        <div className="p-4 flex items-center space-x-3">
-          <div className="flex-shrink-0">{icons[type]}</div>
-          <div className="flex-1">
-            <p className="text-sm font-semibold text-gray-900">{message}</p>
-          </div>
-          <button 
+    <div className="fixed right-4 top-4 z-[100] w-[calc(100%-2rem)] max-w-md animate-[toastIn_.35s_ease-out]">
+      <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#171717]/95 shadow-2xl shadow-black/40 backdrop-blur-xl">
+        <div className="flex items-center gap-3 p-4">
+          <Icon className={`h-5 w-5 shrink-0 ${item.color}`} />
+          <p className="flex-1 text-sm font-medium text-white">{message}</p>
+          <button
+            type="button"
             onClick={onClose}
-            className="p-1.5 hover:bg-gray-100 rounded-full transition-colors duration-200"
+            className="rounded-lg p-1.5 text-white/40 transition hover:bg-white/5 hover:text-white"
           >
-            <XCircle className="h-4 w-4 text-gray-400 hover:text-gray-600" />
+            <XCircle className="h-4 w-4" />
           </button>
         </div>
-        <div className="h-1 bg-gray-100 overflow-hidden">
-          <div className={`h-1 animate-progress ${colors[type]} shadow-lg`}></div>
+        <div className="h-0.5 bg-white/5">
+          <div className={`h-full animate-[toastProgress_4s_linear] bg-gradient-to-r ${item.bar}`} />
         </div>
       </div>
     </div>
   );
 };
 
+const StatCard = ({ icon: Icon, label, value, accent = "amber" }) => {
+  const accentMap = {
+    amber: "from-amber-400/20 to-orange-400/5 text-amber-300",
+    green: "from-emerald-400/20 to-cyan-400/5 text-emerald-300",
+    blue: "from-blue-400/20 to-violet-400/5 text-blue-300",
+  };
+
+  return (
+    <div className="group rounded-2xl border border-white/10 bg-[#171717] p-4 transition duration-300 hover:-translate-y-0.5 hover:border-white/15 hover:bg-[#1a1a1a]">
+      <div className="flex items-center gap-3">
+        <div
+          className={`rounded-xl bg-gradient-to-br p-2.5 ${accentMap[accent] || accentMap.amber}`}
+        >
+          <Icon className="h-4 w-4" />
+        </div>
+        <div className="min-w-0">
+          <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">{label}</p>
+          <p className="mt-1 truncate text-base font-semibold text-white">{value}</p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const SectionCard = ({ title, icon: Icon, children, action }) => (
+  <section className="overflow-hidden rounded-2xl border border-white/10 bg-[#171717] shadow-[0_18px_50px_rgba(0,0,0,.18)]">
+    <div className="flex items-center justify-between border-b border-white/10 px-4 py-4 sm:px-5">
+      <div className="flex min-w-0 items-center gap-2.5">
+        <div className="rounded-lg bg-amber-400/10 p-2 text-amber-300">
+          <Icon className="h-4 w-4" />
+        </div>
+        <h2 className="truncate text-sm font-semibold text-white sm:text-base">{title}</h2>
+      </div>
+      {action}
+    </div>
+    <div className="p-4 sm:p-5">{children}</div>
+  </section>
+);
+
+const DetailRow = ({ icon: Icon, label, value, copyable, copied, onCopy }) => (
+  <div
+    className={`flex items-center justify-between gap-4 rounded-xl border border-white/5 bg-[#111111] px-3 py-3 ${
+      copyable ? "cursor-pointer transition hover:border-white/10 hover:bg-[#151515]" : ""
+    }`}
+    onClick={copyable ? onCopy : undefined}
+  >
+    <div className="flex min-w-0 items-center gap-2.5">
+      <Icon className="h-4 w-4 shrink-0 text-white/35" />
+      <span className="text-xs text-white/45">{label}</span>
+    </div>
+    <div className="flex min-w-0 items-center gap-2">
+      <span className="max-w-[58vw] truncate text-right text-xs font-medium text-white sm:max-w-[260px]">
+        {value || "—"}
+      </span>
+      {copyable && (
+        <Copy className={`h-3.5 w-3.5 shrink-0 ${copied ? "text-emerald-300" : "text-white/25"}`} />
+      )}
+    </div>
+  </div>
+);
+
 const OrderDetails = ({ order, onClose }) => {
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [trackingInput, setTrackingInput] = useState("");
+  const { fetchOrders, url } = useAppContext();
+
   const [loading, setLoading] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
   const [activeTab, setActiveTab] = useState("overview");
   const [isShareMenuOpen, setIsShareMenuOpen] = useState(false);
   const [isJourneyPlaying, setIsJourneyPlaying] = useState(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const { fetchOrders, url } = useAppContext();
-  const invoiceRef = useRef(null);
+  const [trackingModalOpen, setTrackingModalOpen] = useState(false);
+  const [trackingInput, setTrackingInput] = useState("");
+  const [courierInput, setCourierInput] = useState("");
+  const [selectedImage, setSelectedImage] = useState(null);
   const [notification, setNotification] = useState(null);
   const [copiedField, setCopiedField] = useState("");
-  const progressBarRef = useRef(null);
-  const [selectedImage, setSelectedImage] = useState(null);
+  const invoiceRef = useRef(null);
+  const signSrc = "/IMG/sign.png";
 
   useEffect(() => {
-    if (notification) {
-      const timer = setTimeout(() => {
-        setNotification(null);
-      }, 4000);
-      return () => clearTimeout(timer);
-    }
+    if (!notification) return undefined;
+    const timer = setTimeout(() => setNotification(null), 4000);
+    return () => clearTimeout(timer);
   }, [notification]);
 
   useEffect(() => {
-    if (!isJourneyPlaying) return;
-
-    const interval = setInterval(() => {
-      if (progressBarRef.current) {
-        progressBarRef.current.style.transform = 'scaleX(1)';
-      }
-    }, 2000);
-
-    return () => clearInterval(interval);
-  }, [isJourneyPlaying]);
+    setTrackingInput(order?.trackingId || "");
+    setCourierInput(order?.courierPartner || order?.courier || "");
+  }, [order]);
 
   useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (isMobileMenuOpen && !event.target.closest('.mobile-menu-container')) {
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") {
+        setSelectedImage(null);
+        setTrackingModalOpen(false);
         setIsMobileMenuOpen(false);
+        setIsShareMenuOpen(false);
       }
     };
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isMobileMenuOpen]);
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, []);
 
+  /*
+   * IMPORTANT:
+   * Keep ALL React hooks above any conditional return.
+   * `useMemo` was previously below `if (!order) return null`, which caused:
+   * React Hook "useMemo" is called conditionally.
+   */
+  const items = order?.orderItems || [];
+
+  const totals = useMemo(() => {
+    const subtotal = items.reduce((sum, item) => numberValue(sum) + numberValue(item?.price), 0);
+
+   
+
+    const discount = firstNumber(
+      order?.discount,
+      order?.discountAmount,
+      order?.couponDiscount
+    );
+
+    const shipping = firstNumber(
+      order?.shippingCharge,
+      order?.shipping,
+      DEFAULT_SHIPPING
+    );
+
+
+    const amountFromOrder = numberValue(order?.amount);
+    const calculatedGrandTotal = Math.max(
+        shipping,
+      0
+    );
+
+    return {
+      subtotal,
+      discount,
+      shipping,
+     
+      grandTotal: amountFromOrder > 0 ? amountFromOrder : calculatedGrandTotal,
+    };
+  }, [items, order]);
+
+  // Safe early return AFTER all hooks have been executed.
   if (!order) return null;
+
+  const progress = statusMeta(order);
+  const ProgressIcon = progress.icon;
 
   const showNotification = (type, message) => {
     setNotification({ type, message });
   };
 
-  const copyToClipboard = (text, field) => {
-    navigator.clipboard.writeText(text);
-    setCopiedField(field);
-    showNotification("success", `${field} copied to clipboard!`);
-    setTimeout(() => setCopiedField(""), 2000);
-  };
-
-  const shareOrder = async (method = 'link') => {
-    const orderData = {
-      id: order._id,
-      customer: order.userShipping?.FullName,
-      amount: order.amount,
-      status: getOrderProgress().status,
-      date: new Date(order.orderDate).toLocaleDateString()
-    };
-
-    const shareText = `Order #${orderData.id.slice(-8)} - ${orderData.customer} - ₹${orderData.amount} - ${orderData.status}`;
-    const shareUrl = `${window.location.origin}/orders/${order._id}`;
-
+  const copyToClipboard = async (text, field) => {
+    if (!text) return;
     try {
-      if (method === 'whatsapp') {
-        window.open(`https://wa.me/?text=${encodeURIComponent(shareText + '\n' + shareUrl)}`, '_blank');
-      } else if (method === 'email') {
-        window.open(`mailto:?subject=Order ${orderData.id}&body=${encodeURIComponent(shareText + '\n' + shareUrl)}`);
-      } else {
-        await navigator.clipboard.writeText(shareUrl);
-        showNotification("success", "Order link copied to clipboard!");
-      }
-    } catch (error) {
-      showNotification("error", "Failed to share order");
+      await navigator.clipboard.writeText(String(text));
+      setCopiedField(field);
+      showNotification("success", `${field} copied`);
+      setTimeout(() => setCopiedField(""), 1800);
+    } catch {
+      showNotification("error", "Could not copy to clipboard");
     }
-    setIsShareMenuOpen(false);
   };
+
+  const imageUrl = (item) =>
+    item?.imgSrc
+      ? `${url}/img/${item.imgSrc}`
+      : "https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=300&h=300&fit=crop";
 
   const acceptOrReject = async (id, action) => {
     setLoading(true);
+
     try {
       let payload = {};
-      if (action === "accept")
+
+      if (action === "accept") {
         payload = {
           ...order,
           orderAccept: true,
           orderReject: false,
           orderDispatch: false,
         };
-      else if (action === "reject")
+      } else if (action === "reject") {
         payload = {
           ...order,
           orderReject: true,
           orderAccept: false,
           orderDispatch: false,
         };
-      else if (action === "dispatch")
+      } else if (action === "dispatch") {
         payload = { ...order, orderDispatch: true };
-      else if (action === "tracking")
-        payload = { ...order, trackingId: trackingInput };
+      } else if (action === "tracking") {
+        payload = {
+          ...order,
+          trackingId: trackingInput.trim(),
+          courierPartner: courierInput.trim(),
+          courier: courierInput.trim(),
+        };
+      }
 
       await axios.put(`${url}/api/payment/dispatch/${id}`, payload);
-      fetchOrders();
-      setLoading(false);
-      setIsModalOpen(false);
+      await fetchOrders?.();
 
       const messages = {
-        accept: { type: "success", message: "🎉 Order Accepted Successfully!" },
-        reject: { type: "error", message: "❌ Order Rejected" },
-        dispatch: { type: "info", message: "🚚 Order Dispatched to Shipping" },
-        tracking: { type: "success", message: `📦 Tracking ID Added: ${trackingInput}` }
+        accept: ["success", "Order accepted successfully"],
+        reject: ["error", "Order rejected"],
+        dispatch: ["info", "Order dispatched"],
+        tracking: ["success", `Tracking ID ${trackingInput.trim()} saved`],
       };
 
-      showNotification(messages[action].type, messages[action].message);
-      setTimeout(() => onClose(), 1500);
+      const message = messages[action] || ["success", "Order updated"];
+      showNotification(message[0], message[1]);
+
+      setLoading(false);
+      setTrackingModalOpen(false);
+
+      if (action === "tracking") {
+        setTimeout(() => onClose?.(), 900);
+      }
     } catch (error) {
       setLoading(false);
-      showNotification("error", `Error: ${error.message}`);
+      showNotification("error", error?.response?.data?.message || error.message || "Update failed");
     }
   };
 
-  const handlePrintInvoice = () => {
-    setIsPrinting(true);
-    const element = invoiceRef.current;
-    const customerName = order?.userShipping?.FullName || "Customer";
-    const orderId = order?._id || "Invoice";
+  const shareOrder = async (method = "link") => {
+    const orderId = order?._id || "";
+    const shortId = orderId.slice(-8).toUpperCase();
+    const customer = order?.userShipping?.FullName || "Customer";
+    const text = `Order #${shortId} - ${customer} - ${money(order?.amount)} - ${progress.label}`;
+    const shareUrl = `${window.location.origin}/orders/${orderId}`;
 
-    const opt = {
-      margin: [10, 10, 10, 10],
-      filename: `${customerName}_invoice_${orderId}.pdf`,
+    try {
+      if (method === "whatsapp") {
+        window.open(
+          `https://wa.me/?text=${encodeURIComponent(`${text}\n${shareUrl}`)}`,
+          "_blank",
+          "noopener,noreferrer"
+        );
+      } else if (method === "email") {
+        window.open(
+          `mailto:?subject=${encodeURIComponent(`Order ${shortId}`)}&body=${encodeURIComponent(
+            `${text}\n${shareUrl}`
+          )}`
+        );
+      } else {
+        await navigator.clipboard.writeText(shareUrl);
+        showNotification("success", "Order link copied");
+      }
+    } catch {
+      showNotification("error", "Unable to share order");
+    }
+
+    setIsShareMenuOpen(false);
+  };
+
+  const handlePrintInvoice = async () => {
+    if (!invoiceRef.current) return;
+
+    setIsPrinting(true);
+
+    const customerName =
+      order?.userShipping?.FullName?.replace(/[^a-z0-9]+/gi, "_") || "Customer";
+    const invoiceNo = `DARSH-${String(order?._id || "ORDER").slice(-8).toUpperCase()}`;
+
+    const options = {
+      margin: [7, 7, 7, 7],
+      filename: `${invoiceNo}_${customerName}.pdf`,
       image: { type: "jpeg", quality: 0.98 },
-      html2canvas: { 
+      html2canvas: {
         scale: 2,
         useCORS: true,
-        logging: false
+        backgroundColor: "#ffffff",
+        logging: false,
       },
-      jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+      jsPDF: {
+        unit: "mm",
+        format: "a4",
+        orientation: "portrait",
+      },
+      pagebreak: { mode: ["css", "legacy"] },
     };
 
-    html2pdf()
-      .set(opt)
-      .from(element)
-      .save()
-      .finally(() => {
-        setIsPrinting(false);
-        showNotification("success", "📄 Invoice downloaded successfully!");
-      });
+    try {
+      await html2pdf().set(options).from(invoiceRef.current).save();
+      showNotification("success", "Invoice generated successfully");
+    } catch (error) {
+      showNotification("error", `Invoice generation failed: ${error.message}`);
+    } finally {
+      setIsPrinting(false);
+    }
   };
 
-  const subTotal = order?.orderItems?.reduce((sum, item) => sum + item.price, 0) || 0;
-  const totalInvoiceValue = subTotal;
+  const handlePrintBrowser = () => {
+    const node = invoiceRef.current;
+    if (!node) return;
 
-  const getOrderProgress = () => {
-    if (order?.orderReject) return { stage: 0, status: "Rejected", color: "text-red-600", bg: "bg-red-100" };
-    if (order?.trackingId) return { stage: 4, status: "Delivered", color: "text-green-600", bg: "bg-green-100" };
-    if (order?.orderDispatch) return { stage: 3, status: "Dispatched", color: "text-indigo-600", bg: "bg-indigo-100" };
-    if (order?.orderAccept) return { stage: 2, status: "Accepted", color: "text-blue-600", bg: "bg-blue-100" };
-    return { stage: 1, status: "Processing", color: "text-yellow-600", bg: "bg-yellow-100" };
+    const printWindow = window.open("", "_blank", "width=900,height=1000");
+    if (!printWindow) {
+      showNotification("error", "Please allow pop-ups to print the invoice");
+      return;
+    }
+
+    printWindow.document.write(`
+      <!doctype html>
+      <html>
+        <head>
+          <title>Tax Invoice</title>
+          <meta charset="utf-8" />
+          <style>
+            * { box-sizing: border-box; }
+            body { margin: 0; padding: 24px; background: #fff; color: #111; font-family: Arial, sans-serif; }
+            @media print {
+              body { padding: 0; }
+              @page { size: A4; margin: 8mm; }
+            }
+          </style>
+        </head>
+        <body>${node.innerHTML}</body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+      printWindow.close();
+    }, 350);
   };
 
-  const progress = getOrderProgress();
+  const tabs = [
+    { id: "overview", label: "Overview", icon: Eye },
+    { id: "products", label: "Products", icon: Package },
+    { id: "customer", label: "Customer", icon: User },
+    { id: "shipping", label: "Shipping", icon: Truck },
+    { id: "invoice", label: "Invoice", icon: ReceiptIndianRupee },
+  ];
 
-  const MobileActionButtons = () => (
-    <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 z-30 lg:hidden">
-      <div className="flex space-x-3">
-        <button
-          onClick={handlePrintInvoice}
-          disabled={isPrinting}
-          className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors disabled:opacity-50 text-sm font-medium"
-        >
-          {isPrinting ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Download className="h-4 w-4" />
-          )}
-          {isPrinting ? 'Generating...' : 'Invoice'}
-        </button>
-        
-        <button 
-          onClick={() => setIsShareMenuOpen(true)}
-          className="hidden md:flex flex-1 items-center justify-center gap-2 px-4 py-3 bg-white text-gray-700 rounded-xl border border-gray-300 hover:bg-gray-50 transition-colors text-sm font-medium"
-        >
-          <Share2 className="h-4 w-4" />
-          Share
-        </button>
-
-        <button 
-          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-          className="flex items-center justify-center px-4 py-3 bg-white text-gray-700 rounded-xl border border-gray-300 hover:bg-gray-50 transition-colors"
-        >
-          <MoreVertical className="h-4 w-4" />
-        </button>
-      </div>
-    </div>
-  );
-
-  const MobileMenu = () => (
-    <div className="mobile-menu-container fixed bottom-16 left-4 right-4 bg-white rounded-2xl shadow-2xl border border-gray-200 z-40 animate-scale-in lg:hidden">
-      <div className="p-3 space-y-2">
-        <button className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 rounded-xl transition-colors">
-          <BarChart3 className="h-4 w-4" />
-          View Analytics
-        </button>
-        <button className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 rounded-xl transition-colors">
-          <Star className="h-4 w-4" />
-          Add Note
-        </button>
-        <button className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 rounded-xl transition-colors">
-          <Heart className="h-4 w-4" />
-          Save Customer
-        </button>
-        <button className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-600 hover:bg-red-50 rounded-xl transition-colors">
-          <RotateCcw className="h-4 w-4" />
-          Refresh Data
-        </button>
-      </div>
-    </div>
-  );
+  const journey = [
+    { stage: 1, label: "Placed", description: "Order received", icon: Clock },
+    { stage: 2, label: "Accepted", description: "Order confirmed", icon: CheckCircle },
+    { stage: 3, label: "Dispatched", description: "Shipped out", icon: Truck },
+    { stage: 4, label: "Delivered", description: "Delivery completed", icon: ShieldCheck },
+  ];
 
   const InvoicePreview = () => (
-    <div className="bg-white rounded-2xl lg:rounded-3xl shadow-sm border border-gray-200/60 p-4 lg:p-6">
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between mb-6 space-y-3 lg:space-y-0">
-        <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-          <FileText className="h-5 w-5 text-indigo-600" />
-          Invoice Preview
-        </h2>
+    <SectionCard
+      title="Invoice"
+      icon={ReceiptIndianRupee}
+      action={
         <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-500">Ready to download</span>
-          <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+          <span className="hidden text-[11px] text-white/35 sm:inline">A4 • GST PAD</span>
+          <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
+        </div>
+      }
+    >
+      <div className="rounded-2xl border border-white/10 bg-[#101010] p-3 sm:p-5">
+        <div className="mb-5 flex flex-col gap-4 border-b border-white/10 pb-5 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-400 text-black shadow-lg shadow-amber-400/10">
+                <ReceiptIndianRupee className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-lg font-black tracking-tight text-white">TAX INVOICE</p>
+                <p className="text-[11px] uppercase tracking-[0.2em] text-white/35">Invoice / Bill</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="sm:text-right">
+            <p className="text-xs text-white/40">Invoice No.</p>
+            <p className="font-mono text-sm font-semibold text-amber-300">
+              DARSH-{String(order?._id || "").slice(-8).toUpperCase()}
+            </p>
+            <p className="mt-1 text-xs text-white/40">Date: {formatDate(order?.orderDate)}</p>
+          </div>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-2">
+          <div className="rounded-xl border border-white/10 bg-[#171717] p-4">
+            <div className="mb-3 flex items-center gap-2 text-amber-300">
+              <Building2 className="h-4 w-4" />
+              <p className="text-xs font-bold uppercase tracking-wider">Seller</p>
+            </div>
+            <p className="font-semibold text-white">{SELLER.name}</p>
+            <p className="mt-1 text-xs leading-5 text-white/50">{SELLER.address}</p>
+            <p className="mt-1 text-xs text-white/50">Phone: {SELLER.phone}</p>
+            
+          </div>
+
+          <div className="rounded-xl border border-white/10 bg-[#171717] p-4">
+            <div className="mb-3 flex items-center gap-2 text-amber-300">
+              <User className="h-4 w-4" />
+              <p className="text-xs font-bold uppercase tracking-wider">Bill To</p>
+            </div>
+            <p className="font-semibold text-white">{order?.userShipping?.FullName || "Customer"}</p>
+            <p className="mt-1 text-xs text-white/50">{order?.userShipping?.Phone || "—"}</p>
+            <p className="mt-1 text-xs leading-5 text-white/50">{order?.userShipping?.Add || "—"}</p>
+            <p className="mt-1 text-xs text-white/50">
+              {[order?.userShipping?.VillorCity, order?.userShipping?.Dist, order?.userShipping?.State]
+                .filter(Boolean)
+                .join(", ")}
+              {order?.userShipping?.Pin ? ` - ${order.userShipping.Pin}` : ""}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 overflow-hidden rounded-xl border border-white/10">
+          <div className="overflow-x-auto">
+            <table className="min-w-[680px] w-full border-collapse text-left">
+              <thead>
+                <tr className="bg-white/[0.04] text-[10px] uppercase tracking-[0.14em] text-white/40">
+                  <th className="px-3 py-3">#</th>
+                  <th className="px-3 py-3">Description</th>
+                  <th className="px-3 py-3 text-center">HSN</th>
+                  <th className="px-3 py-3 text-center">Qty</th>
+                  <th className="px-3 py-3 text-right">Rate</th>
+                  <th className="px-3 py-3 text-right">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((item, index) => {
+                  const qty = Math.max(numberValue(item?.qty), 1);
+                  const amount = numberValue(item?.price);
+                  const rate = amount / qty;
+
+                  return (
+                    <tr key={item?._id || `${item?.title}-${index}`} className="border-t border-white/10 text-xs text-white/75">
+                      <td className="px-3 py-3 text-white/40">{index + 1}</td>
+                      <td className="px-3 py-3">
+                        <p className="font-semibold text-white">{item?.title || "Product"}</p>
+                        <p className="mt-0.5 text-[10px] text-white/35">
+                          {item?.size ? `Size: ${item.size}` : "Darsh product"}
+                        </p>
+                      </td>
+                      <td className="px-3 py-3 text-center text-white/45">{item?.hsn || "5407"}</td>
+                      <td className="px-3 py-3 text-center">{qty}</td>
+                      <td className="px-3 py-3 text-right">{money(rate)}</td>
+                      <td className="px-3 py-3 text-right font-semibold text-white">{money(amount)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:justify-end">
+          <div className="w-full max-w-sm rounded-xl border border-white/10 bg-[#171717] p-4">
+            <div className="flex justify-between py-1.5 text-xs">
+              <span className="text-white/45">Subtotal</span>
+              <span className="font-medium text-white">{money(totals.subtotal)}</span>
+            </div>
+            {totals.discount > 0 && (
+              <div className="flex justify-between py-1.5 text-xs">
+                <span className="text-emerald-300">Discount</span>
+                <span className="font-medium text-emerald-300">-{money(totals.discount)}</span>
+              </div>
+            )}
+            <div className="flex justify-between py-1.5 text-xs">
+              <span className="text-white/45">Taxable value</span>
+              <span className="font-medium text-white">{money(totals.taxableValue)}</span>
+            </div>
+            <div className="flex justify-between py-1.5 text-xs">
+              <span className="text-white/45">Shipping</span>
+              <span className="font-medium text-white">
+                {totals.shipping ? money(totals.shipping) : "Free"}
+              </span>
+            </div>
+            <div className="my-2 border-t border-white/10" />
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-bold text-white">Grand Total</span>
+              <span className="text-xl font-black text-amber-300">{money(totals.grandTotal)}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-5 flex flex-col gap-2 border-t border-white/10 pt-4 text-[10px] text-white/35 sm:flex-row sm:items-center sm:justify-between">
+          <span>Payment: {order?.paymentMethod || "Online Payment"} • Status: {order?.payStatus || "—"}</span>
+          <span>Computer generated invoice</span>
         </div>
       </div>
 
-      <div className="bg-gradient-to-br from-gray-50 to-blue-50/30 rounded-xl lg:rounded-2xl p-4 lg:p-6 border border-gray-200/50">
-        <div className="flex flex-col lg:flex-row lg:justify-between lg:items-start mb-6 space-y-4 lg:space-y-0">
-          <div>
-            <h3 className="text-xl lg:text-2xl font-bold text-gray-900">INVOICE</h3>
-            <p className="text-sm text-gray-600 mt-1">#{order?._id?.slice(-8).toUpperCase()}</p>
-          </div>
-          <div className="text-left lg:text-right">
-            <p className="text-lg font-bold text-gray-900">₹{order?.amount}</p>
-            <p className="text-sm text-gray-500">Total Amount</p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6 mb-6">
-          <div>
-            <h4 className="font-semibold text-gray-900 mb-2">Bill To:</h4>
-            <p className="text-sm text-gray-700">{order?.userShipping?.FullName}</p>
-            <p className="text-sm text-gray-600">{order?.userShipping?.Phone}</p>
-            <p className="text-sm text-gray-600 line-clamp-2">{order?.userShipping?.Add}</p>
-          </div>
-          <div>
-            <h4 className="font-semibold text-gray-900 mb-2">Order Details:</h4>
-            <p className="text-sm text-gray-700">
-              Date: {new Date(order.orderDate).toLocaleDateString('en-IN')}
-            </p>
-            <p className="text-sm text-gray-700">
-              Status: <span className="font-semibold text-green-600">Paid</span>
-            </p>
-            <p className="text-sm text-gray-700">
-              Items: {order?.orderItems?.length} products
-            </p>
-          </div>
-        </div>
-
-        <div className="border-t border-gray-200 pt-4">
-          <div className="flex justify-between items-center">
-            <span className="text-sm text-gray-600">Subtotal</span>
-            <span className="text-sm font-semibold text-gray-900">₹{subTotal}</span>
-          </div>
-          <div className="flex justify-between items-center mt-2">
-            <span className="text-sm text-gray-600">Tax</span>
-            <span className="text-sm font-semibold text-gray-900">₹0.00</span>
-          </div>
-          <div className="flex justify-between items-center mt-3 pt-3 border-t border-gray-200">
-            <span className="text-base lg:text-lg font-bold text-gray-900">Total</span>
-            <span className="text-base lg:text-lg font-bold text-indigo-600">₹{totalInvoiceValue}</span>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex flex-col sm:flex-row gap-3 mt-6">
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
         <button
+          type="button"
           onClick={handlePrintInvoice}
           disabled={isPrinting}
-          className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors disabled:opacity-50 text-sm font-medium"
+          className="group flex items-center justify-center gap-2 rounded-xl bg-amber-400 px-4 py-3 text-sm font-bold text-black transition hover:-translate-y-0.5 hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {isPrinting ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Download className="h-4 w-4" />
-          )}
-          {isPrinting ? 'Generating...' : 'Download PDF'}
+          {isPrinting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+          {isPrinting ? "Generating Bill..." : "Download Invoice"}
+        </button>
+
+        <button
+          type="button"
+          onClick={handlePrintBrowser}
+          className="flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm font-semibold text-white transition hover:border-white/20 hover:bg-white/[0.06]"
+        >
+          <Printer className="h-4 w-4" />
+          Print Invoice
         </button>
       </div>
-    </div>
+    </SectionCard>
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50/30 pb-20 lg:pb-8">
-      {/* Enhanced Header */}
-      <div className="bg-white/80 backdrop-blur-lg border-b border-gray-200/60 sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between py-4 lg:py-6 space-y-4 sm:space-y-0">
-            <div className="flex items-center space-x-3 lg:space-x-4 w-full sm:w-auto">
+    <div className="min-h-screen bg-[#0b0b0b] pb-24 text-white selection:bg-amber-400 selection:text-black">
+      <style>{`
+        @keyframes toastIn {
+          from { opacity: 0; transform: translateY(-12px) scale(.98); }
+          to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        @keyframes toastProgress {
+          from { width: 100%; }
+          to { width: 0%; }
+        }
+        @keyframes floatIn {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes pulseGlow {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(251,191,36,.0); }
+          50% { box-shadow: 0 0 0 7px rgba(251,191,36,.08); }
+        }
+        .order-fade-in { animation: floatIn .45s ease-out both; }
+        .amber-glow { animation: pulseGlow 2.4s ease-in-out infinite; }
+        .scrollbar-dark::-webkit-scrollbar { height: 5px; width: 5px; }
+        .scrollbar-dark::-webkit-scrollbar-track { background: #111; }
+        .scrollbar-dark::-webkit-scrollbar-thumb { background: #343434; border-radius: 999px; }
+      `}</style>
+
+      {/* Header */}
+      <header className="sticky top-0 z-40 border-b border-white/10 bg-[#0b0b0b]/90 backdrop-blur-xl">
+        <div className="mx-auto max-w-[1500px] px-3 py-3 sm:px-5 lg:px-7">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-3">
               <button
+                type="button"
                 onClick={onClose}
-                className="group p-2 lg:p-3 hover:bg-white rounded-xl lg:rounded-2xl transition-all duration-300 shadow-sm hover:shadow-md border border-gray-200/50"
+                className="group rounded-xl border border-white/10 bg-white/[0.03] p-2.5 transition hover:border-amber-400/30 hover:bg-amber-400/10"
+                aria-label="Back"
               >
-                <ArrowLeft className="h-5 w-5 text-gray-600 group-hover:text-gray-900 transition-colors" />
+                <ArrowLeft className="h-4 w-4 text-white/70 transition group-hover:-translate-x-0.5 group-hover:text-amber-300" />
               </button>
-              <div className="space-y-1 flex-1 min-w-0">
-                <div className="flex items-center space-x-2 lg:space-x-3">
-                  <h1 className="text-xl lg:text-2xl xl:text-3xl font-bold bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 text-transparent bg-clip-text truncate">
+
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <h1 className="truncate text-lg font-bold tracking-tight text-white sm:text-xl">
                     Order Details
                   </h1>
-                  <span className="px-2 lg:px-3 py-1 text-xs font-semibold rounded-full bg-gradient-to-r from-indigo-100 to-purple-100 text-indigo-700 border border-indigo-200 whitespace-nowrap">
-                    #{order?._id?.slice(-8)}
+                  <span className="hidden rounded-md border border-amber-400/20 bg-amber-400/10 px-2 py-1 font-mono text-[10px] font-semibold text-amber-300 sm:inline">
+                    #{String(order?._id || "").slice(-8).toUpperCase()}
                   </span>
                 </div>
-                <div className="flex flex-col lg:flex-row lg:items-center space-y-1 lg:space-y-0 lg:space-x-4 text-sm text-gray-600">
-                  <div className="flex items-center space-x-1">
-                    <Calendar className="h-4 w-4" />
-                    <span className="text-xs lg:text-sm">{new Date(order.orderDate).toLocaleDateString('en-IN')}</span>
-                  </div>
-                  <div className="flex items-center space-x-1">
-                    <Clock className="h-4 w-4" />
-                    <span className="text-xs lg:text-sm">{new Date(order.orderDate).toLocaleTimeString('en-IN', { 
-                      hour: '2-digit', 
-                      minute: '2-digit' 
-                    })}</span>
-                  </div>
+                <div className="mt-1 flex items-center gap-2 text-[10px] text-white/35 sm:text-xs">
+                  <Calendar className="h-3.5 w-3.5" />
+                  {formatDate(order?.orderDate)}
+                  <span>•</span>
+                  <Clock className="h-3.5 w-3.5" />
+                  {order?.orderDate ? new Date(order.orderDate).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "—"}
                 </div>
               </div>
             </div>
 
-            <div className="hidden lg:flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-              <button
-                onClick={handlePrintInvoice}
-                disabled={isPrinting}
-                className={`
-                  group relative flex items-center justify-center gap-2 px-6 py-3 rounded-2xl font-semibold
-                  transition-all duration-500 ease-out transform hover:scale-105 hover:shadow-2xl
-                  ${isPrinting 
-                    ? 'bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-lg' 
-                    : 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700 shadow-lg hover:shadow-blue-500/25'
-                  }
-                  overflow-hidden
-                `}
-              >
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -skew-x-12 transform translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
-                
-                <div className="relative flex items-center gap-2">
-                  {isPrinting ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Download className="h-4 w-4 transition-transform group-hover:scale-110" />
-                  )}
-                  <span className="text-sm">{isPrinting ? 'Generating...' : 'Download Invoice'}</span>
-                </div>
-              </button>
+            <div className="hidden items-center gap-2 lg:flex">
+              <div className={`flex items-center gap-2 rounded-xl border px-3 py-2 ${getToneClasses(progress.tone)}`}>
+                <ProgressIcon className="h-4 w-4" />
+                <span className="text-xs font-semibold">{progress.label}</span>
+              </div>
 
               <div className="relative">
-                <button 
-                  onClick={() => setIsShareMenuOpen(!isShareMenuOpen)}
-                  className="flex items-center gap-2 px-4 py-3 bg-white text-gray-700 rounded-2xl border border-gray-300 hover:bg-gray-50 transition-all duration-300 shadow-sm hover:shadow-md w-full sm:w-auto"
+                <button
+                  type="button"
+                  onClick={() => setIsShareMenuOpen((value) => !value)}
+                  className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-2.5 text-xs font-semibold text-white/80 transition hover:border-white/20 hover:bg-white/[0.06]"
                 >
                   <Share2 className="h-4 w-4" />
-                  <span className="text-sm">Share</span>
-                  <ChevronRight className={`h-4 w-4 transition-transform ${isShareMenuOpen ? 'rotate-90' : ''}`} />
+                  Share
+                  <ChevronDown className={`h-3.5 w-3.5 transition ${isShareMenuOpen ? "rotate-180" : ""}`} />
                 </button>
 
                 {isShareMenuOpen && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-2xl shadow-2xl border border-gray-200/60 backdrop-blur-sm z-50 animate-scale-in">
-                    <div className="p-2">
-                      <button
-                        onClick={() => shareOrder('link')}
-                        className="flex items-center gap-3 w-full px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-50 rounded-xl transition-colors"
-                      >
-                        <Copy className="h-4 w-4 text-gray-400" />
-                        Copy Order Link
-                      </button>
-                      <button
-                        onClick={() => shareOrder('whatsapp')}
-                        className="flex whitespace-nowrap items-center gap-3 w-full px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-50 rounded-xl transition-colors"
-                      >
-                        <MessageCircle className="h-4 w-4 text-green-500" />
-                        Share WhatsApp
-                      </button>
-                      <button
-                        onClick={() => shareOrder('email')}
-                        className="flex items-center gap-3 w-full px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-50 rounded-xl transition-colors"
-                      >
-                        <Mail className="h-4 w-4 text-blue-500" />
-                        Share via Email
-                      </button>
-                    </div>
+                  <div className="absolute right-0 top-[calc(100%+8px)] w-52 overflow-hidden rounded-xl border border-white/10 bg-[#171717] p-1.5 shadow-2xl shadow-black/50">
+                    <button
+                      type="button"
+                      onClick={() => shareOrder("link")}
+                      className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-xs text-white/70 transition hover:bg-white/5 hover:text-white"
+                    >
+                      <Copy className="h-4 w-4" />
+                      Copy Order Link
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => shareOrder("whatsapp")}
+                      className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-xs text-white/70 transition hover:bg-white/5 hover:text-white"
+                    >
+                      <MessageCircle className="h-4 w-4 text-emerald-400" />
+                      Share WhatsApp
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => shareOrder("email")}
+                      className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-xs text-white/70 transition hover:bg-white/5 hover:text-white"
+                    >
+                      <Mail className="h-4 w-4 text-blue-400" />
+                      Share Email
+                    </button>
                   </div>
                 )}
               </div>
+
+              <button
+                type="button"
+                onClick={handlePrintInvoice}
+                disabled={isPrinting}
+                className="flex items-center gap-2 rounded-xl bg-amber-400 px-4 py-2.5 text-xs font-bold text-black shadow-lg shadow-amber-400/10 transition hover:-translate-y-0.5 hover:bg-amber-300 disabled:opacity-60"
+              >
+                {isPrinting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                {isPrinting ? "Generating..." : "Invoice"}
+              </button>
             </div>
+
+            <button
+              type="button"
+              onClick={() => setIsMobileMenuOpen((value) => !value)}
+              className="rounded-xl border border-white/10 bg-white/[0.03] p-2.5 text-white/70 lg:hidden"
+            >
+              <MoreVertical className="h-4 w-4" />
+            </button>
           </div>
         </div>
-      </div>
+      </header>
 
-      {/* Navigation Tabs */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4 lg:mt-6">
-        <div className="flex overflow-x-auto space-x-1 bg-white/80 backdrop-blur-sm rounded-xl lg:rounded-2xl p-1.5 border border-gray-200/60 shadow-sm scrollbar-hide">
-          {[
-            { id: "overview", label: "Overview", icon: Eye },
-            { id: "products", label: "Products", icon: Package },
-            { id: "customer", label: "Customer", icon: User },
-            { id: "shipping", label: "Shipping", icon: Truck },
-            { id: "invoice", label: "Invoice", icon: FileText },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-3 lg:px-4 py-2 lg:py-2.5 rounded-lg lg:rounded-xl text-xs lg:text-sm font-medium transition-all duration-300 whitespace-nowrap ${
-                activeTab === tab.id
-                  ? "bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-md"
-                  : "text-gray-600 hover:text-gray-900 hover:bg-white"
-              }`}
-            >
-              <tab.icon className="h-3 w-3 lg:h-4 lg:w-4" />
-              <span className="hidden md:block">{tab.label}</span>
-            </button>
-          ))}
+      {/* Tabs */}
+      <div className="mx-auto max-w-[1500px] px-3 pt-3 sm:px-5 lg:px-7">
+        <div className="scrollbar-dark flex overflow-x-auto rounded-xl border border-white/10 bg-[#121212] p-1">
+          {tabs.map((tab) => {
+            const Icon = tab.icon;
+            const active = activeTab === tab.id;
+
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                className={`relative flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-[11px] font-semibold transition sm:px-4 sm:text-xs ${
+                  active
+                    ? "bg-amber-400 text-black shadow-lg shadow-amber-400/10"
+                    : "text-white/45 hover:bg-white/5 hover:text-white"
+                }`}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4 lg:mt-6">
+      <main className="mx-auto max-w-[1500px] px-3 pb-10 pt-3 sm:px-5 lg:px-7">
         {activeTab === "invoice" ? (
-          <InvoicePreview />
+          <div className="order-fade-in">
+            <InvoicePreview />
+          </div>
         ) : (
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 lg:gap-6">
-            <div className="xl:col-span-2 space-y-4 lg:space-y-6">
-              <div className="bg-white rounded-2xl lg:rounded-3xl shadow-sm border border-gray-200/60 p-4 lg:p-6">
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between mb-4 lg:mb-6 space-y-3 lg:space-y-0">
-                  <h2 className="text-base lg:text-lg font-semibold text-gray-900 flex items-center gap-2">
-                    <TrendingUp className="h-4 w-4 lg:h-5 lg:w-5 text-indigo-600" />
-                    Order Journey
-                  </h2>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setIsJourneyPlaying(!isJourneyPlaying)}
-                      className="p-2 hover:bg-gray-100 rounded-xl transition-colors"
-                    >
-                      {isJourneyPlaying ? (
-                        <Pause className="h-4 w-4 text-gray-600" />
-                      ) : (
-                        <Play className="h-4 w-4 text-gray-600" />
-                      )}
-                    </button>
-                    <span className={`px-2 lg:px-3 py-1 lg:py-1.5 text-xs lg:text-sm font-semibold rounded-full ${progress.bg} ${progress.color} border`}>
-                      {progress.status}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="relative">
-                  <div className="lg:hidden">
-                    <div className="flex items-center justify-between mb-4">
-                      {[
-                        { stage: 1, label: "Placed", icon: Clock },
-                        { stage: 2, label: "Accepted", icon: CheckCircle },
-                        { stage: 3, label: "Dispatched", icon: Truck },
-                        { stage: 4, label: "Delivered", icon: BadgeCheck },
-                      ].map((step, index) => (
-                        <div key={step.stage} className="flex flex-col items-center flex-1">
-                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center border-2 transition-all duration-500 ${
-                            progress.stage >= step.stage
-                              ? 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white border-transparent shadow-lg'
-                              : 'bg-white border-gray-300 text-gray-400'
-                          }`}>
-                            <step.icon className="h-4 w-4" />
-                          </div>
-                          <span className="text-xs mt-1 font-medium text-center text-gray-600">
-                            {step.label}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="hidden lg:block">
-                    <div className="flex justify-between mb-3 relative">
-                      {[
-                        { stage: 1, label: "Placed", icon: Clock, description: "Order received" },
-                        { stage: 2, label: "Accepted", icon: CheckCircle, description: "Order confirmed" },
-                        { stage: 3, label: "Dispatched", icon: Truck, description: "Shipped out" },
-                        { stage: 4, label: "Delivered", icon: BadgeCheck, description: "Delivery completed" },
-                      ].map((step, index) => (
-                        <div key={step.stage} className="flex flex-col items-center flex-1 relative">
-                          {index < 3 && (
-                            <div className={`absolute top-5 left-1/2 w-full h-0.5 -z-10 ${
-                              progress.stage > step.stage 
-                                ? 'bg-gradient-to-r from-indigo-500 to-purple-500' 
-                                : 'bg-gray-200'
-                            }`}>
-                              {progress.stage === step.stage && isJourneyPlaying && (
-                                <div className="absolute right-0 top-1/2 transform -translate-y-1/2 w-3 h-3">
-                                  <div className="w-3 h-3 bg-indigo-500 rotate-45 transform origin-center animate-pulse"></div>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                          
-                          <div className={`w-10 h-10 lg:w-12 lg:h-12 rounded-xl lg:rounded-2xl flex items-center justify-center border-2 transition-all duration-500 transform ${
-                            progress.stage >= step.stage
-                              ? 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white border-transparent shadow-lg scale-110'
-                              : progress.stage === step.stage - 0.5
-                              ? 'bg-indigo-100 border-indigo-300 text-indigo-400 scale-105'
-                              : 'bg-white border-gray-300 text-gray-400'
-                          } ${isJourneyPlaying && progress.stage === step.stage ? 'animate-bounce' : ''}`}>
-                            <step.icon className="h-5 w-5 lg:h-6 lg:w-6" />
-                          </div>
-                          <span className={`text-xs mt-2 lg:mt-3 font-medium text-center ${
-                            progress.stage >= step.stage ? 'text-gray-900' : 'text-gray-500'
-                          }`}>
-                            {step.label}
-                          </span>
-                          <span className="text-xs text-gray-400 text-center mt-1 hidden sm:block">
-                            {step.description}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                    
-                    <div className="relative h-2 bg-gray-200 rounded-full overflow-hidden mt-4">
-                      <div 
-                        ref={progressBarRef}
-                        className="absolute top-0 left-0 h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full transition-all duration-2000 ease-out transform origin-left"
-                        style={{ 
-                          width: `${(progress.stage / 4) * 100}%`,
-                          transform: `scaleX(${isJourneyPlaying ? 1 : 0.95})` 
-                        }}
-                      >
-                        <div className="absolute top-0 left-0 w-20 h-full bg-white/30 skew-x-12 animate-shine"></div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Action Buttons */}
-                <div className="mt-6 lg:mt-8 space-y-3">
-                  {order?.orderDispatch ? (
-                    <button
-                      onClick={() => setIsModalOpen(true)}
-                      disabled={loading}
-                      className={`group w-full flex items-center justify-center gap-2 lg:gap-3 px-4 lg:px-6 py-3 lg:py-4 rounded-xl lg:rounded-2xl font-semibold transition-all duration-300 ${
-                        loading 
-                          ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
-                          : 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white hover:shadow-xl lg:hover:shadow-2xl hover:scale-[1.02] shadow-lg'
-                      }`}
-                    >
-                      {loading && <Loader2 className="h-4 w-4 lg:h-5 lg:w-5 animate-spin" />}
-                      <MapPin className="h-4 w-4 lg:h-5 lg:w-5" />
-                      <span className="text-xs lg:text-base whitespace-nowrap">Add Tracking Information</span>
-                    </button>
-                  ) : order?.orderAccept ? (
-                    <button
-                      onClick={() => acceptOrReject(order._id, "dispatch")}
-                      disabled={loading}
-                      className={`group w-full flex items-center justify-center gap-2 lg:gap-3 px-4 lg:px-6 py-3 lg:py-4 rounded-xl lg:rounded-2xl font-semibold transition-all duration-300 ${
-                        loading 
-                          ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
-                          : 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white hover:shadow-xl lg:hover:shadow-2xl hover:scale-[1.02] shadow-lg'
-                      }`}
-                    >
-                      {loading && <Loader2 className="h-4 w-4 lg:h-5 lg:w-5 animate-spin" />}
-                      <Truck className="h-4 w-4 lg:h-5 lg:w-5" />
-                      <span className="text-sm lg:text-base">Dispatch Order</span>
-                    </button>
-                  ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <button
-                        onClick={() => acceptOrReject(order._id, "accept")}
-                        disabled={loading}
-                        className={`group flex items-center justify-center gap-2 lg:gap-3 px-4 lg:px-6 py-3 lg:py-4 rounded-xl lg:rounded-2xl font-semibold transition-all duration-300 ${
-                          loading 
-                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
-                            : 'bg-gradient-to-r from-green-600 to-emerald-600 text-white hover:shadow-xl lg:hover:shadow-2xl hover:scale-[1.02] shadow-lg'
-                        }`}
-                      >
-                        {loading && <Loader2 className="h-4 w-4 lg:h-5 lg:w-5 animate-spin" />}
-                        <CheckCircle className="h-4 w-4 lg:h-5 lg:w-5" />
-                        <span className="text-sm lg:text-base">Accept Order</span>
-                      </button>
-                      <button
-                        onClick={() => acceptOrReject(order._id, "reject")}
-                        disabled={loading}
-                        className={`group flex items-center justify-center gap-2 lg:gap-3 px-4 lg:px-6 py-3 lg:py-4 rounded-xl lg:rounded-2xl font-semibold transition-all duration-300 ${
-                          loading 
-                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
-                            : 'bg-gradient-to-r from-red-600 to-pink-600 text-white hover:shadow-xl lg:hover:shadow-2xl hover:scale-[1.02] shadow-lg'
-                        }`}
-                      >
-                        {loading && <Loader2 className="h-4 w-4 lg:h-5 lg:w-5 animate-spin" />}
-                        <XCircle className="h-4 w-4 lg:h-5 lg:w-5" />
-                        <span className="text-sm lg:text-base">Reject Order</span>
-                      </button>
-                    </div>
-                  )}
-                </div>
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_370px]">
+            {/* Main column */}
+            <div className="min-w-0 space-y-4">
+              {/* Summary strip */}
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <StatCard icon={ReceiptIndianRupee} label="Grand Total" value={money(totals.grandTotal)} />
+                <StatCard icon={Package} label="Items" value={`${items.length} product${items.length === 1 ? "" : "s"}`} accent="blue" />
+                <StatCard icon={CreditCard} label="Payment" value={order?.payStatus || "Pending"} accent="green" />
               </div>
 
-              {/* Products Section */}
-              {(activeTab === "products" || activeTab === "overview") && (
-                <div className="bg-white rounded-2xl lg:rounded-3xl shadow-sm border border-gray-200/60 p-4 lg:p-6">
-                  <div className="flex flex-col lg:flex-row lg:items-center justify-between mb-4 lg:mb-6 space-y-3 lg:space-y-0">
-                    <h2 className="text-base lg:text-lg font-semibold text-gray-900 flex items-center gap-2">
-                      <Package className="h-4 w-4 lg:h-5 lg:w-5 text-indigo-600" />
-                      Order Items ({order?.orderItems?.length || 0})
-                    </h2>
-                    <div className="flex items-center gap-2 text-sm text-gray-500">
-                      <CreditCard className="h-4 w-4" />
-                      Total: <span className="font-semibold text-gray-900">₹{order?.amount}</span>
-                    </div>
-                  </div>
-
-                  <div className="space-y-3 lg:space-y-4">
-                    {order?.orderItems?.map((item, i) => (
-                      <div
-                        key={i}
-                        className="group flex items-center space-x-3 lg:space-x-4 p-3 lg:p-4 bg-gradient-to-r from-gray-50 to-blue-50/30 rounded-xl lg:rounded-2xl border border-gray-200/50 hover:border-indigo-200 transition-all duration-300 hover:shadow-md"
+              {/* Journey */}
+              {activeTab === "overview" && (
+                <SectionCard
+                  title="Order Journey"
+                  icon={Truck}
+                  action={
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setIsJourneyPlaying((value) => !value)}
+                        className="rounded-lg border border-white/10 bg-white/[0.03] p-1.5 text-white/45 transition hover:text-white"
                       >
-                        <div className="relative flex-shrink-0">
-                          <img
-  src={
-    item.imgSrc
-      ? `${url}/img/${item.imgSrc}`
-      : "https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=150&h=150&fit=crop&crop=center"
-  }
-  alt={item.title}
- onClick={() =>
-  setSelectedImage({
-    src: item.imgSrc
-      ? `${url}/img/${item.imgSrc}`
-      : "https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=150&h=150&fit=crop&crop=center",
-    title: item.title,
-  })
-}
-  className="h-12 w-12 lg:h-16 lg:w-16 object-cover rounded-lg lg:rounded-xl shadow-sm cursor-pointer hover:scale-105 transition-all"
-/>
-                          <div className="absolute -top-1 -right-1 bg-indigo-500 text-white text-xs font-bold px-1.5 lg:px-2 py-0.5 lg:py-1 rounded-full">
-                            {item.qty}
-                          </div>
-                          {
-                            item.size && (
-                              <div className="absolute -bottom-1 -right-1 bg-gray-800 text-white text-xs font-semibold px-1.5 lg:px-2 py-0.5 lg:py-1 rounded-full">
-                                {item.size}
+                        {isJourneyPlaying ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+                      </button>
+                      <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold ${getToneClasses(progress.tone)}`}>
+                        {progress.label}
+                      </span>
+                    </div>
+                  }
+                >
+                  <div className="relative">
+                    <div className="grid grid-cols-4 gap-1">
+                      {journey.map((step, index) => {
+                        const StepIcon = step.icon;
+                        const complete = progress.stage >= step.stage;
+                        const current = progress.stage === step.stage;
+
+                        return (
+                          <div key={step.stage} className="relative text-center">
+                            {index < journey.length - 1 && (
+                              <div className="absolute left-1/2 right-[-50%] top-5 -z-0 h-px bg-white/10">
+                                <div
+                                  className={`h-full origin-left transition-all duration-700 ${
+                                    progress.stage > step.stage ? "w-full bg-amber-400" : "w-0"
+                                  }`}
+                                />
                               </div>
-                            )
-                          }
-                        </div>
-                        
-                        <div className="flex-1 min-w-0">
-                          <h3 className="font-semibold text-gray-900 truncate text-sm lg:text-base group-hover:text-indigo-600 transition-colors">
-                            {item.title}
-                          </h3>
-                          <p className="text-xs lg:text-sm text-gray-600 mt-1">Quantity: {item.qty}</p>
-                          {
-                            item.size && (
-                              <p className="text-xs lg:text-sm text-gray-600 mt-1">Size: {item.size}</p>
-                            )
-                          }
-                          <div className="flex items-center gap-2 mt-1 lg:mt-2">
-                            <span className="text-xs lg:text-sm font-medium text-gray-900">
-                              ₹{item.price / item.qty} each
-                            </span>
-                            <span className="text-gray-400 hidden sm:inline">•</span>
-                            <span className="text-xs lg:text-sm font-semibold text-indigo-600">
-                              ₹{item.price} total
-                            </span>
+                            )}
+
+                            <div
+                              className={`relative mx-auto flex h-10 w-10 items-center justify-center rounded-xl border transition duration-500 sm:h-11 sm:w-11 ${
+                                complete
+                                  ? "border-amber-400/20 bg-amber-400 text-black shadow-lg shadow-amber-400/10"
+                                  : "border-white/10 bg-[#111] text-white/25"
+                              } ${current && isJourneyPlaying ? "amber-glow" : ""}`}
+                            >
+                              <StepIcon className={`h-4 w-4 sm:h-5 sm:w-5 ${current && isJourneyPlaying ? "animate-pulse" : ""}`} />
+                            </div>
+                            <p className={`mt-2 text-[10px] font-semibold sm:text-xs ${complete ? "text-white" : "text-white/35"}`}>
+                              {step.label}
+                            </p>
+                            <p className="mt-0.5 hidden text-[10px] text-white/25 sm:block">{step.description}</p>
                           </div>
-                        </div>
-                        
-                        <div className="text-right flex-shrink-0">
-                          <div className="w-2 h-2 lg:w-3 lg:h-3 bg-green-400 rounded-full animate-pulse mb-1 lg:mb-2"></div>
-                          <span className="text-xs text-gray-500">In Stock</span>
-                        </div>
-                      </div>
-                    ))}
+                        );
+                      })}
+                    </div>
+
+                    <div className="mt-5 h-1 overflow-hidden rounded-full bg-white/5">
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-amber-400 via-orange-400 to-amber-300 transition-all duration-700"
+                        style={{ width: `${Math.min((Math.max(progress.stage, 0) / 4) * 100, 100)}%` }}
+                      />
+                    </div>
                   </div>
 
-                  {/* Order Summary */}
-                  <div className="mt-4 lg:mt-6 pt-4 lg:pt-6 border-t border-gray-200">
-                    <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center space-y-3 lg:space-y-0">
-                      <div className="space-y-2">
-                        <p className="text-xs lg:text-sm text-gray-600 flex items-center gap-2">
-                          <CreditCard className="h-3 w-3 lg:h-4 lg:w-4" />
-                          Payment Method: <span className="font-semibold text-gray-900">{order?.paymentMethod || "Online Payment"}</span>
-                        </p>
-                        <p className="text-xs lg:text-sm text-gray-600">
-                          Payment Status: <span className={`font-semibold ${
-                            order?.payStatus === 'paid' ? 'text-green-600' : 'text-yellow-600'
-                          }`}>
-                            {order?.payStatus?.charAt(0).toUpperCase() + order?.payStatus?.slice(1)}
-                          </span>
-                        </p>
+                  <div className="mt-5 grid gap-2 sm:grid-cols-2">
+                    {order?.orderDispatch ? (
+                      <button
+                        type="button"
+                        onClick={() => setTrackingModalOpen(true)}
+                        disabled={loading}
+                        className="flex items-center justify-center gap-2 rounded-xl bg-amber-400 px-4 py-3 text-xs font-bold text-black transition hover:bg-amber-300 disabled:opacity-50 sm:col-span-2"
+                      >
+                        <MapPin className="h-4 w-4" />
+                        Add / Update Tracking
+                      </button>
+                    ) : order?.orderAccept ? (
+                      <button
+                        type="button"
+                        onClick={() => acceptOrReject(order._id, "dispatch")}
+                        disabled={loading}
+                        className="flex items-center justify-center gap-2 rounded-xl bg-amber-400 px-4 py-3 text-xs font-bold text-black transition hover:bg-amber-300 disabled:opacity-50 sm:col-span-2"
+                      >
+                        {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Truck className="h-4 w-4" />}
+                        Dispatch Order
+                      </button>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => acceptOrReject(order._id, "accept")}
+                          disabled={loading}
+                          className="flex items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 py-3 text-xs font-bold text-black transition hover:bg-emerald-400 disabled:opacity-50"
+                        >
+                          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
+                          Accept Order
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => acceptOrReject(order._id, "reject")}
+                          disabled={loading}
+                          className="flex items-center justify-center gap-2 rounded-xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-xs font-bold text-red-300 transition hover:bg-red-400/15 disabled:opacity-50"
+                        >
+                          <XCircle className="h-4 w-4" />
+                          Reject Order
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </SectionCard>
+              )}
+
+              {/* Products */}
+              {(activeTab === "overview" || activeTab === "products") && (
+                <SectionCard
+                  title={`Products in this order (${items.length})`}
+                  icon={Package}
+                  action={<span className="text-xs font-semibold text-amber-300">{money(totals.grandTotal)}</span>}
+                >
+                  <div className="overflow-hidden rounded-xl border border-white/10">
+                    <div className="hidden grid-cols-[minmax(0,1fr)_100px_70px_100px] gap-3 border-b border-white/10 bg-[#111] px-4 py-3 text-[10px] uppercase tracking-wider text-white/35 sm:grid">
+                      <span>Item</span>
+                      <span>Rate</span>
+                      <span>Qty</span>
+                      <span className="text-right">Amount</span>
+                    </div>
+
+                    <div className="divide-y divide-white/10">
+                      {items.length === 0 ? (
+                        <div className="p-8 text-center text-xs text-white/35">No products found in this order.</div>
+                      ) : (
+                        items.map((item, index) => {
+                          const qty = Math.max(numberValue(item?.qty), 1);
+                          const amount = numberValue(item?.price);
+                          const src = imageUrl(item);
+
+                          return (
+                            <div
+                              key={item?._id || `${item?.title}-${index}`}
+                              className="group grid grid-cols-1 gap-3 bg-[#151515] p-3 transition hover:bg-[#181818] sm:grid-cols-[minmax(0,1fr)_100px_70px_100px] sm:items-center sm:gap-3 sm:px-4"
+                            >
+                              <div className="flex min-w-0 items-center gap-3">
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedImage({ src, title: item?.title || "Product" })}
+                                  className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-black transition hover:scale-[1.03] hover:border-amber-400/30"
+                                >
+                                  <img src={src} alt={item?.title || "Product"} className="h-full w-full object-cover" />
+                                  <span className="absolute bottom-1 right-1 rounded-md bg-black/80 px-1.5 py-0.5 text-[9px] font-bold text-white">
+                                    {qty}
+                                  </span>
+                                </button>
+
+                                <div className="min-w-0">
+                                  <p className="truncate text-xs font-semibold text-white sm:text-sm">{item?.title || "Product"}</p>
+                                  <p className="mt-1 text-[10px] text-white/35">
+                                    {item?.size ? `Size: ${item.size} • ` : ""}
+                                    SKU: {item?.sku || item?.productCode || "—"}
+                                  </p>
+                                  <div className="mt-1.5 flex flex-wrap gap-2 sm:hidden">
+                                    <span className="text-[10px] text-white/45">Rate {money(amount / qty)}</span>
+                                    <span className="text-[10px] text-amber-300">Total {money(amount)}</span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="hidden text-xs text-white/60 sm:block">{money(amount / qty)}</div>
+                              <div className="hidden text-xs text-white/60 sm:block">{qty}</div>
+                              <div className="hidden text-right text-xs font-bold text-white sm:block">{money(amount)}</div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-xl border border-white/10 bg-[#111] p-4">
+                      <p className="text-[10px] uppercase tracking-wider text-white/35">Payment method</p>
+                      <div className="mt-2 flex items-center gap-2">
+                        <CreditCard className="h-4 w-4 text-amber-300" />
+                        <span className="text-xs font-semibold text-white">{order?.paymentMethod || "Online Payment"}</span>
                       </div>
-                      <div className="text-left lg:text-right">
-                        <p className="text-base lg:text-lg font-bold text-gray-900">₹{order?.amount}</p>
-                        <p className="text-xs lg:text-sm text-gray-500">Total Amount</p>
+                    </div>
+                    <div className="rounded-xl border border-white/10 bg-[#111] p-4">
+                      <p className="text-[10px] uppercase tracking-wider text-white/35">Payment status</p>
+                      <div className="mt-2 flex items-center gap-2">
+                        <span className={`h-2 w-2 rounded-full ${String(order?.payStatus).toLowerCase() === "paid" ? "bg-emerald-400" : "bg-amber-400"}`} />
+                        <span className="text-xs font-semibold text-white">{order?.payStatus || "Pending"}</span>
                       </div>
                     </div>
                   </div>
-                </div>
+                </SectionCard>
+              )}
+
+              {/* Customer / shipping on mobile and overview */}
+              {(activeTab === "customer" || activeTab === "overview") && (
+                <SectionCard title="Customer Details" icon={User}>
+                  <div className="space-y-2">
+                    <DetailRow
+                      icon={User}
+                      label="Name"
+                      value={order?.userShipping?.FullName}
+                      copyable
+                      copied={copiedField === "Customer Name"}
+                      onCopy={() => copyToClipboard(order?.userShipping?.FullName, "Customer Name")}
+                    />
+                    <DetailRow
+                      icon={Phone}
+                      label="Phone"
+                      value={order?.userShipping?.Phone}
+                      copyable
+                      copied={copiedField === "Phone"}
+                      onCopy={() => copyToClipboard(order?.userShipping?.Phone, "Phone")}
+                    />
+                    {order?.userShipping?.Email && (
+                      <DetailRow
+                        icon={Mail}
+                        label="Email"
+                        value={order?.userShipping?.Email}
+                        copyable
+                        copied={copiedField === "Email"}
+                        onCopy={() => copyToClipboard(order?.userShipping?.Email, "Email")}
+                      />
+                    )}
+                  </div>
+                </SectionCard>
+              )}
+
+              {(activeTab === "shipping" || activeTab === "overview") && (
+                <SectionCard title="Shipping Address" icon={MapPin}>
+                  <div className="rounded-xl border border-amber-400/10 bg-amber-400/[0.04] p-4">
+                    <div className="flex items-start gap-3">
+                      <Home className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
+                      <p className="text-xs leading-6 text-white/75">{order?.userShipping?.Add || "Address not available"}</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <div className="rounded-xl border border-white/5 bg-[#111] p-3">
+                      <p className="text-[10px] text-white/35">City / Village</p>
+                      <p className="mt-1 truncate text-xs font-semibold text-white">{order?.userShipping?.VillorCity || "—"}</p>
+                    </div>
+                    <div className="rounded-xl border border-white/5 bg-[#111] p-3">
+                      <p className="text-[10px] text-white/35">District</p>
+                      <p className="mt-1 truncate text-xs font-semibold text-white">{order?.userShipping?.Dist || "—"}</p>
+                    </div>
+                    <div className="rounded-xl border border-white/5 bg-[#111] p-3">
+                      <p className="text-[10px] text-white/35">State</p>
+                      <p className="mt-1 truncate text-xs font-semibold text-white">{order?.userShipping?.State || "—"}</p>
+                    </div>
+                    <div className="rounded-xl border border-white/5 bg-[#111] p-3">
+                      <p className="text-[10px] text-white/35">PIN</p>
+                      <p className="mt-1 text-xs font-semibold text-white">{order?.userShipping?.Pin || "—"}</p>
+                    </div>
+                  </div>
+                </SectionCard>
               )}
             </div>
 
-            {(activeTab === "customer" || activeTab === "overview" || activeTab === "shipping") && (
-              <div className="space-y-4 lg:space-y-6">
-                <div className="bg-white rounded-2xl lg:rounded-3xl shadow-sm border border-gray-200/60 p-4 lg:p-6">
-                  <div className="flex items-center gap-2 lg:gap-3 mb-4 lg:mb-6">
-                    <div className="p-1.5 lg:p-2 bg-gradient-to-r from-indigo-100 to-purple-100 rounded-lg lg:rounded-xl">
-                      <User className="h-4 w-4 lg:h-5 lg:w-5 text-indigo-600" />
-                    </div>
-                    <h2 className="text-base lg:text-lg font-semibold text-gray-900">Customer Details</h2>
-                  </div>
-
-                  <div className="space-y-3 lg:space-y-4">
-                    <div className="flex items-center justify-between p-2 lg:p-3 bg-gray-50 rounded-lg lg:rounded-xl hover:bg-gray-100 transition-colors cursor-pointer group"
-                      onClick={() => copyToClipboard(order?.userShipping?.FullName, "Customer Name")}>
-                      <div className="flex items-center gap-2 lg:gap-3">
-                        <User className="h-3 w-3 lg:h-4 lg:w-4 text-gray-400" />
-                        <span className="text-xs lg:text-sm font-medium text-gray-600">Name</span>
-                      </div>
-                      <div className="flex items-center gap-1 lg:gap-2">
-                        <span className="text-xs lg:text-sm font-semibold text-gray-900 truncate max-w-[100px] lg:max-w-none">{order?.userShipping?.FullName}</span>
-                        <Copy className={`h-3 w-3 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity ${
-                          copiedField === "Customer Name" ? 'text-green-500 opacity-100' : ''
-                        }`} />
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between p-2 lg:p-3 bg-gray-50 rounded-lg lg:rounded-xl hover:bg-gray-100 transition-colors cursor-pointer group"
-                      onClick={() => copyToClipboard(order?.userShipping?.Phone, "Phone")}>
-                      <div className="flex items-center gap-2 lg:gap-3">
-                        <Phone className="h-3 w-3 lg:h-4 lg:w-4 text-gray-400" />
-                        <span className="text-xs lg:text-sm font-medium text-gray-600">Phone</span>
-                      </div>
-                      <div className="flex items-center gap-1 lg:gap-2">
-                        <span className="text-xs lg:text-sm font-semibold text-gray-900">{order?.userShipping?.Phone}</span>
-                        <Copy className={`h-3 w-3 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity ${
-                          copiedField === "Phone" ? 'text-green-500 opacity-100' : ''
-                        }`} />
-                      </div>
-                    </div>
-
-                    {order?.userShipping?.Email && (
-                      <div className="flex items-center justify-between p-2 lg:p-3 bg-gray-50 rounded-lg lg:rounded-xl hover:bg-gray-100 transition-colors cursor-pointer group"
-                        onClick={() => copyToClipboard(order?.userShipping?.Email, "Email")}>
-                        <div className="flex items-center gap-2 lg:gap-3">
-                          <Mail className="h-3 w-3 lg:h-4 lg:w-4 text-gray-400" />
-                          <span className="text-xs lg:text-sm font-medium text-gray-600">Email</span>
-                        </div>
-                        <div className="flex items-center gap-1 lg:gap-2">
-                          <span className="text-xs lg:text-sm font-semibold text-gray-900 truncate max-w-[100px] lg:max-w-[120px]">{order?.userShipping?.Email}</span>
-                          <Copy className={`h-3 w-3 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity ${
-                            copiedField === "Email" ? 'text-green-500 opacity-100' : ''
-                          }`} />
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="flex items-center justify-between p-2 lg:p-3 bg-gray-50 rounded-lg lg:rounded-xl">
-                      <div className="flex items-center gap-2 lg:gap-3">
-                        <Package className="h-3 w-3 lg:h-4 lg:w-4 text-gray-400" />
-                        <span className="text-xs lg:text-sm font-medium text-gray-600">Items</span>
-                      </div>
-                      <span className="text-xs lg:text-sm font-semibold text-gray-900">{order?.orderItems?.length}</span>
-                    </div>
-
-                    {order?.trackingId && (
-                      <div className="flex items-center justify-between p-2 lg:p-3 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg lg:rounded-xl border border-green-200">
-                        <div className="flex items-center gap-2 lg:gap-3">
-                          <Truck className="h-3 w-3 lg:h-4 lg:w-4 text-green-600" />
-                          <span className="text-xs lg:text-sm font-medium text-green-700">Tracking ID</span>
-                        </div>
-                        <span className="text-xs lg:text-sm font-semibold text-green-800 truncate max-w-[100px] lg:max-w-none">{order?.trackingId}</span>
-                      </div>
-                    )}
-                  </div>
+            {/* Sidebar */}
+            <aside className="space-y-4">
+              <SectionCard title="Order Information" icon={FileText}>
+                <div className="space-y-2">
+                  <DetailRow
+                    icon={Hash}
+                    label="Order ID"
+                    value={order?._id}
+                    copyable
+                    copied={copiedField === "Order ID"}
+                    onCopy={() => copyToClipboard(order?._id, "Order ID")}
+                  />
+                  <DetailRow icon={Calendar} label="Placed" value={formatDateTime(order?.orderDate)} />
+                  <DetailRow icon={CreditCard} label="Payment" value={order?.paymentMethod || "Online Payment"} />
+                  <DetailRow icon={ShieldCheck} label="Status" value={progress.label} />
+                  {order?.transactionId && (
+                    <DetailRow
+                      icon={ReceiptIndianRupee}
+                      label="Transaction"
+                      value={order.transactionId}
+                      copyable
+                      copied={copiedField === "Transaction ID"}
+                      onCopy={() => copyToClipboard(order.transactionId, "Transaction ID")}
+                    />
+                  )}
                 </div>
+              </SectionCard>
 
-                <div className="bg-white rounded-2xl lg:rounded-3xl shadow-sm border border-gray-200/60 p-4 lg:p-6">
-                  <div className="flex items-center gap-2 lg:gap-3 mb-4 lg:mb-6">
-                    <div className="p-1.5 lg:p-2 bg-gradient-to-r from-blue-100 to-cyan-100 rounded-lg lg:rounded-xl">
-                      <MapPin className="h-4 w-4 lg:h-5 lg:w-5 text-blue-600" />
+              <SectionCard
+                title="Dispatch & Tracking"
+                icon={Truck}
+                action={order?.trackingId ? <span className="h-2 w-2 rounded-full bg-emerald-400" /> : null}
+              >
+                <div className="rounded-xl border border-white/10 bg-[#111] p-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wider text-white/35">Courier</p>
+                      <p className="mt-1 text-xs font-semibold text-white">
+                        {order?.courierPartner || order?.courier || "Not assigned"}
+                      </p>
                     </div>
-                    <h2 className="text-base lg:text-lg font-semibold text-gray-900">Shipping Address</h2>
-                  </div>
-
-                  <div className="space-y-3 text-xs lg:text-sm">
-                    <div className="flex items-start gap-2 lg:gap-3 p-2 lg:p-3 bg-blue-50/50 rounded-lg lg:rounded-xl">
-                      <Home className="h-3 w-3 lg:h-4 lg:w-4 text-blue-500 mt-0.5 flex-shrink-0" />
-                      <span className="font-medium text-gray-900 break-words">{order?.userShipping?.Add}</span>
-                    </div>
-                    
-                    <div className="grid grid-cols-1 xs:grid-cols-2 gap-2 lg:gap-3">
-                      <div className="flex items-center gap-1 lg:gap-2 p-2 bg-gray-50 rounded-lg">
-                        <MapPin className="h-3 w-3 lg:h-4 lg:w-4 text-gray-400 flex-shrink-0" />
-                        <span className="text-gray-700 truncate">{order?.userShipping?.VillorCity}</span>
-                      </div>
-                      <div className="flex items-center gap-1 lg:gap-2 p-2 bg-gray-50 rounded-lg">
-                        <Globe className="h-3 w-3 lg:h-4 lg:w-4 text-gray-400 flex-shrink-0" />
-                        <span className="text-gray-700 truncate">{order?.userShipping?.Dist}</span>
-                      </div>
-                      <div className="flex items-center gap-1 lg:gap-2 p-2 bg-gray-50 rounded-lg">
-                        <Flag className="h-3 w-3 lg:h-4 lg:w-4 text-gray-400 flex-shrink-0" />
-                        <span className="text-gray-700 truncate">{order?.userShipping?.State}</span>
-                      </div>
-                      <div className="flex items-center gap-1 lg:gap-2 p-2 bg-gray-50 rounded-lg">
-                        <Hash className="h-3 w-3 lg:h-4 lg:w-4 text-gray-400 flex-shrink-0" />
-                        <span className="text-gray-700">{order?.userShipping?.Pin}</span>
-                      </div>
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wider text-white/35">Tracking ID</p>
+                      <p className="mt-1 truncate font-mono text-xs font-semibold text-amber-300">
+                        {order?.trackingId || "Not added"}
+                      </p>
                     </div>
                   </div>
                 </div>
 
-                <div className="hidden lg:block bg-gradient-to-br from-indigo-500 to-purple-600 rounded-3xl p-6 text-white shadow-2xl">
-                  <h3 className="font-semibold mb-4 flex items-center gap-2">
-                    <Shield className="h-5 w-5" />
-                    Quick Actions
-                  </h3>
-                  <div className="space-y-3">
-                    <button className="w-full flex items-center gap-3 p-3 bg-white/10 rounded-xl hover:bg-white/20 transition-all duration-300 backdrop-blur-sm">
-                      <Star className="h-4 w-4" />
-                      <span className="text-sm font-medium">Add Note</span>
-                    </button>
-                    <button className="w-full flex items-center gap-3 p-3 bg-white/10 rounded-xl hover:bg-white/20 transition-all duration-300 backdrop-blur-sm">
-                      <Heart className="h-4 w-4" />
-                      <span className="text-sm font-medium">Save Customer</span>
-                    </button>
-                    <button className="w-full flex items-center gap-3 p-3 bg-white/10 rounded-xl hover:bg-white/20 transition-all duration-300 backdrop-blur-sm">
-                      <BarChart3 className="h-4 w-4" />
-                      <span className="text-sm font-medium">View Analytics</span>
-                    </button>
+                <button
+                  type="button"
+                  onClick={() => setTrackingModalOpen(true)}
+                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-xs font-semibold text-white transition hover:border-amber-400/25 hover:bg-amber-400/5"
+                >
+                  <MapPin className="h-4 w-4 text-amber-300" />
+                  {order?.trackingId ? "Update Tracking" : "Add Tracking"}
+                </button>
+              </SectionCard>
+
+              <SectionCard title="GST Billing Summary" icon={Landmark}>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-white/40">Taxable value</span>
+                    <span className="font-semibold text-white">{money(totals.taxableValue)}</span>
+                  </div>
+                  <div className="my-2 border-t border-white/10" />
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-bold text-white">Grand total</span>
+                    <span className="text-lg font-black text-amber-300">{money(totals.grandTotal)}</span>
                   </div>
                 </div>
-              </div>
-            )}
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("invoice")}
+                  className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-amber-400 px-4 py-3 text-xs font-bold text-black transition hover:bg-amber-300"
+                >
+                  <ReceiptIndianRupee className="h-4 w-4" />
+                  Open Invoice
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </button>
+              </SectionCard>
+            </aside>
           </div>
         )}
+      </main>
+
+      {/* Mobile actions */}
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-[#0b0b0b]/95 p-3 backdrop-blur-xl lg:hidden">
+        <div className="mx-auto flex max-w-2xl gap-2">
+          <button
+            type="button"
+            onClick={handlePrintInvoice}
+            disabled={isPrinting}
+            className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-amber-400 px-3 py-3 text-xs font-bold text-black disabled:opacity-60"
+          >
+            {isPrinting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+            Invoice
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("invoice")}
+            className="flex items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] px-4 text-white/80"
+          >
+            <ReceiptIndianRupee className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsMobileMenuOpen((value) => !value)}
+            className="flex items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] px-4 text-white/80"
+          >
+            <MoreVertical className="h-4 w-4" />
+          </button>
+        </div>
       </div>
 
-      <MobileActionButtons />
+      {isMobileMenuOpen && (
+        <div className="fixed inset-x-3 bottom-[76px] z-50 rounded-2xl border border-white/10 bg-[#171717] p-2 shadow-2xl shadow-black/60 lg:hidden">
+          <button
+            type="button"
+            onClick={() => {
+              setIsMobileMenuOpen(false);
+              setActiveTab("invoice");
+            }}
+            className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-xs text-white/75 hover:bg-white/5"
+          >
+            <ReceiptIndianRupee className="h-4 w-4 text-amber-300" />
+            Open Invoice
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setIsMobileMenuOpen(false);
+              setIsShareMenuOpen(true);
+            }}
+            className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-xs text-white/75 hover:bg-white/5"
+          >
+            <Share2 className="h-4 w-4" />
+            Share order
+          </button>
+        </div>
+      )}
+
+      {/* Image viewer */}
       {selectedImage && (
-  <div
-    className="fixed inset-0 bg-black/80 z-[9999] flex items-center justify-center p-4"
-    onClick={() => setSelectedImage(null)}
-  >
-    <div
-      className="relative bg-white rounded-2xl overflow-hidden max-w-4xl w-full"
-      onClick={(e) => e.stopPropagation()}
-    >
-      {/* Header */}
-      <div className="flex items-center justify-between px-5 py-4 border-b">
-        <h2 className="text-lg font-semibold text-gray-800">
-          {selectedImage.title}
-        </h2>
-
-        <button
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-black/85 p-4 backdrop-blur-md"
           onClick={() => setSelectedImage(null)}
-          className="text-2xl text-gray-500 hover:text-red-500"
         >
-          &times;
-        </button>
-      </div>
+          <div
+            className="w-full max-w-3xl overflow-hidden rounded-2xl border border-white/10 bg-[#151515] shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+              <p className="truncate pr-4 text-sm font-semibold text-white">{selectedImage.title}</p>
+              <button
+                type="button"
+                onClick={() => setSelectedImage(null)}
+                className="rounded-lg p-1.5 text-white/45 hover:bg-white/5 hover:text-white"
+              >
+                <XCircle className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="flex max-h-[80vh] items-center justify-center bg-black p-4">
+              <img
+                src={selectedImage.src}
+                alt={selectedImage.title}
+                className="max-h-[72vh] max-w-full rounded-xl object-contain"
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
-      {/* Image */}
-      <div className="flex justify-center bg-gray-100 p-4">
-        <img
-          src={selectedImage.src}
-          alt={selectedImage.title}
-          className="max-h-[80vh] max-w-full object-contain rounded-lg"
-        />
-      </div>
-    </div>
-  </div>
-)}
-      {isMobileMenuOpen && <MobileMenu />}
-
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
-          <div className="bg-white rounded-2xl lg:rounded-3xl shadow-2xl w-full max-w-md transform animate-scale-in">
-            <div className="p-4 lg:p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg lg:text-xl font-bold text-gray-900 flex items-center gap-2">
-                  <Truck className="h-4 w-4 lg:h-5 lg:w-5 text-purple-600" />
-                  Add Tracking Information
-                </h2>
-                <button
-                  onClick={() => setIsModalOpen(false)}
-                  className="p-2 hover:bg-gray-100 rounded-xl transition-colors"
-                >
-                  <XCircle className="h-4 w-4 lg:h-5 lg:w-5 text-gray-400" />
-                </button>
+      {/* Tracking modal */}
+      {trackingModalOpen && (
+        <div
+          className="fixed inset-0 z-[95] flex items-center justify-center bg-black/75 p-4 backdrop-blur-md"
+          onClick={() => !loading && setTrackingModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-md overflow-hidden rounded-2xl border border-white/10 bg-[#171717] shadow-2xl shadow-black/60"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
+              <div className="flex items-center gap-3">
+                <div className="rounded-xl bg-amber-400/10 p-2.5 text-amber-300">
+                  <Truck className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold text-white">Dispatch & Tracking</h2>
+                  <p className="mt-0.5 text-[10px] text-white/35">Add courier and tracking information</p>
+                </div>
               </div>
-              
-              <div className="space-y-4">
-                <p className="text-sm text-gray-600">
-                  Enter the tracking ID provided by your shipping partner. This will allow the customer to track their order.
-                </p>
-                
+              <button
+                type="button"
+                onClick={() => setTrackingModalOpen(false)}
+                disabled={loading}
+                className="rounded-lg p-2 text-white/40 hover:bg-white/5 hover:text-white"
+              >
+                <XCircle className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4 p-5">
+              <label className="block">
+                <span className="mb-2 block text-xs font-semibold text-white/60">Courier partner</span>
+                <select
+                  value={courierInput}
+                  onChange={(event) => setCourierInput(event.target.value)}
+                  className="w-full rounded-xl border border-white/10 bg-[#0f0f0f] px-3 py-3 text-xs text-white outline-none transition focus:border-amber-400/40"
+                >
+                  <option value="">Select courier</option>
+                  <option value="Delhivery">Delhivery</option>
+                  <option value="DTDC">DTDC</option>
+                  <option value="Blue Dart">Blue Dart</option>
+                  <option value="India Post">India Post</option>
+                  <option value="Ekart">Ekart</option>
+                  <option value="Other">Other</option>
+                </select>
+              </label>
+
+              <label className="block">
+                <span className="mb-2 block text-xs font-semibold text-white/60">Tracking number</span>
                 <div className="relative">
                   <input
-                    type="text"
                     value={trackingInput}
-                    onChange={(e) => setTrackingInput(e.target.value)}
-                    placeholder="Enter Tracking ID (e.g., TRK123456789)"
-                    className="w-full pl-4 pr-10 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all duration-300 text-sm lg:text-base"
+                    onChange={(event) => setTrackingInput(event.target.value)}
+                    placeholder="TRK123456789"
+                    className="w-full rounded-xl border border-white/10 bg-[#0f0f0f] px-3 py-3 pr-10 font-mono text-xs text-white outline-none placeholder:text-white/20 focus:border-amber-400/40"
                   />
-                  <Package className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4 lg:h-5 lg:w-5" />
+                  <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/25" />
                 </div>
-                
-                <div className="flex gap-3 pt-2">
-                  <button
-                    onClick={() => setIsModalOpen(false)}
-                    className="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors font-medium text-sm lg:text-base"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={() => acceptOrReject(order._id, "tracking")}
-                    className="flex-1 px-4 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl hover:shadow-lg transition-all duration-300 font-medium text-sm lg:text-base"
-                  >
-                    Save Tracking
-                  </button>
-                </div>
+              </label>
+
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setTrackingModalOpen(false)}
+                  disabled={loading}
+                  className="flex-1 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-xs font-semibold text-white/65 hover:bg-white/[0.06]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!trackingInput.trim()) {
+                      showNotification("error", "Enter a tracking number");
+                      return;
+                    }
+                    acceptOrReject(order._id, "tracking");
+                  }}
+                  disabled={loading}
+                  className="flex-1 rounded-xl bg-amber-400 px-4 py-3 text-xs font-bold text-black hover:bg-amber-300 disabled:opacity-60"
+                >
+                  {loading ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : "Save Tracking"}
+                </button>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      <div className="hidden">
-        <div ref={invoiceRef} className="p-8 font-sans text-gray-800 text-sm">
-          <div className="flex justify-between items-start mb-8">
-            <div className="text-left">
-              <h1 className="text-3xl font-bold text-blue-800">Darsh</h1>
-              <p className="text-xs mt-1">
-               Nilkuthidanga, Purulia, West bengal, PIN: 723101
-              </p>
-              <p className="text-xs">
-                Contact No: 7363054510
-              </p>
-            </div>
-            <div className="text-right">
-              <h2 className="text-3xl font-bold text-blue-800">TAX INVOICE</h2>
-              <p className="text-sm mt-2">
-                <span className="font-semibold">Invoice No:</span>{" "}
-                {order?._id.slice(18)}
-              </p>
-              <p className="text-sm">
-                <span className="font-semibold">Order ID:</span> {order?._id}
-              </p>
-              <p className="text-sm">
-                <span className="font-semibold">Date:</span>{" "}
-                {new Date(order.orderDate).toLocaleDateString("en-GB")}
-              </p>
-              <p className="text-sm">
-                <span className="font-semibold">Transaction ID:</span>{" "}
-                {order?.transactionId || "N/A"}
-              </p>
-              <p className="text-sm">
-                <span className="font-semibold">Payment Status:</span>{" "}
-                {order?.payStatus}
-              </p>
-            </div>
-          </div>
-
-          <div className="border border-gray-300 p-4 mb-8 rounded-lg shadow-sm">
-            <h3 className="font-bold text-lg text-gray-800 mb-4">
-              Customer Information
-            </h3>
-            <div className="text-sm space-y-4">
-              {/* Billing Information */}
+      {/* =====================================================
+          Hidden A4 GST PAD BILL
+          This is intentionally white and print/PDF friendly.
+          ===================================================== */}
+      <div className="pointer-events-none fixed left-[-100000px] top-0 opacity-0">
+        <div
+          ref={invoiceRef}
+          style={{
+            width: "794px",
+            minHeight: "1123px",
+            background: "#fff",
+            color: "#111",
+            padding: "34px",
+            fontFamily: "Arial, Helvetica, sans-serif",
+            fontSize: "11px",
+          }}
+        >
+          <div style={{ border: "1px solid #222", minHeight: "100%" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "22px 24px", borderBottom: "2px solid #111" }}>
               <div>
-                <p className="font-bold text-blue-700 mb-3">
-                  Billing Information
-                </p>
+                <div style={{ fontSize: "28px", fontWeight: 900, letterSpacing: "-1px" }}>{SELLER.name}</div>
+                <div style={{ marginTop: "5px", fontSize: "10px", lineHeight: 1.5 }}>
+                  {SELLER.address}
+                </div>
+                <div style={{ marginTop: "3px", fontSize: "10px" }}>Phone: {SELLER.phone}</div>
+                <div style={{ marginTop: "3px", fontSize: "10px" }}>
+                  State: {SELLER.state} | State Code: {SELLER.stateCode}
+                </div>
+              </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-2 gap-4">
-                  {/* Left column */}
-                  <div className="space-y-2">
-                    <p className="flex items-center">
-                      <User className="h-4 w-4 mr-2 text-gray-600" />
-                      <span className="font-semibold">Name:</span>&nbsp;
-                      {order?.userShipping?.FullName}
-                    </p>
-
-                    <p className="flex items-center">
-                      <Phone className="h-4 w-4 mr-2 text-gray-600" />
-                      <span className="font-semibold">Phone:</span>&nbsp;
-                      {order?.userShipping?.Phone}
-                    </p>
-
-                    <p className="flex items-center">
-                      <Home className="h-4 w-4 mr-2 text-gray-600" />
-                      <span className="font-semibold">Street:</span>&nbsp;
-                      {order?.userShipping?.Add}
-                    </p>
-                  </div>
-
-                  {/* Right column */}
-                  <div className="space-y-2">
-                    <p className="flex items-center">
-                      <MapPin className="h-4 w-4 mr-2 text-gray-600" />
-                      <span className="font-semibold">City/Village:</span>&nbsp;
-                      {order?.userShipping?.VillorCity}
-                    </p>
-
-                    <p className="flex items-center">
-                      <Globe className="h-4 w-4 mr-2 text-gray-600" />
-                      <span className="font-semibold">District:</span>&nbsp;
-                      {order?.userShipping?.Dist}
-                    </p>
-
-                    <p className="flex items-center">
-                      <Flag className="h-4 w-4 mr-2 text-gray-600" />
-                      <span className="font-semibold">State:</span>&nbsp;
-                      {order?.userShipping?.State}
-                    </p>
-
-                    <p className="flex items-center">
-                      <Hash className="h-4 w-4 mr-2 text-gray-600" />
-                      <span className="font-semibold">PIN:</span>&nbsp;
-                      {order?.userShipping?.Pin}
-                    </p>
-                  </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: "22px", fontWeight: 900 }}>TAX INVOICE</div>
+                <div style={{ marginTop: "8px", fontSize: "10px" }}>
+                  <b>Invoice No:</b> DARSH-{String(order?._id || "").slice(-8).toUpperCase()}
+                </div>
+                <div style={{ marginTop: "4px", fontSize: "10px" }}>
+                  <b>Order ID:</b> {order?._id || "—"}
+                </div>
+                <div style={{ marginTop: "4px", fontSize: "10px" }}>
+                  <b>Date:</b> {formatDate(order?.orderDate)}
+                </div>
+                <div style={{ marginTop: "4px", fontSize: "10px" }}>
+                  <b>Payment:</b> {order?.payStatus || "—"}
                 </div>
               </div>
             </div>
-          </div>
 
-          {/* Product Table */}
-          <table className="w-full text-left border-collapse mb-8">
-            <thead>
-              <tr className="bg-gray-100 border-b border-t border-gray-300 text-xs font-semibold text-gray-700">
-                <th className="p-2 w-10">S.No</th>
-                <th className="p-2">Description</th>
-                <th className="p-2 text-center w-16">Qty</th>
-                <th className="p-2 text-right w-20">Price</th>
-                <th className="p-2 text-right w-24">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {order?.orderItems?.map((item, i) => (
-                <tr key={i} className="border-b border-gray-200 text-xs">
-                  <td className="p-2">{i + 1}</td>
-                  <td className="p-2">{item.title}</td>
-                  <td className="p-2 text-center">{item.qty}</td>
-                  <td className="p-2 text-right">₹{item.price / item.qty}</td>
-                  <td className="p-2 text-right">₹{item.price}</td>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", borderBottom: "1px solid #222" }}>
+              <div style={{ padding: "15px 18px", borderRight: "1px solid #222" }}>
+                <div style={{ fontWeight: 800, marginBottom: "7px" }}>BILL TO</div>
+                <div style={{ fontWeight: 700 }}>{order?.userShipping?.FullName || "Customer"}</div>
+                <div style={{ marginTop: "4px" }}>{order?.userShipping?.Phone || "—"}</div>
+                <div style={{ marginTop: "4px", lineHeight: 1.5 }}>{order?.userShipping?.Add || "—"}</div>
+                <div style={{ marginTop: "4px" }}>
+                  {[order?.userShipping?.VillorCity, order?.userShipping?.Dist, order?.userShipping?.State]
+                    .filter(Boolean)
+                    .join(", ")}
+                  {order?.userShipping?.Pin ? ` - ${order.userShipping.Pin}` : ""}
+                </div>
+              </div>
+
+              <div style={{ padding: "15px 18px" }}>
+                <div style={{ fontWeight: 800, marginBottom: "7px" }}>DELIVERY / PAYMENT</div>
+                <div style={{ marginBottom: "4px" }}>
+                  <b>Courier:</b> {order?.courierPartner || order?.courier || "—"}
+                </div>
+                <div style={{ marginBottom: "4px" }}>
+                  <b>Tracking:</b> {order?.trackingId || "—"}
+                </div>
+                <div style={{ marginBottom: "4px" }}>
+                  <b>Method:</b> {order?.paymentMethod || "Online Payment"}
+                </div>
+                <div>
+                  <b>Transaction:</b> {order?.transactionId || "—"}
+                </div>
+              </div>
+            </div>
+
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ background: "#f1f1f1" }}>
+                  {["S.No", "Description", "HSN", "Qty", "Rate", "Amount"].map((heading, index) => (
+                    <th
+                      key={heading}
+                      style={{
+                        border: "1px solid #222",
+                        padding: "8px 6px",
+                        textAlign: index === 1 ? "left" : index === 0 || index === 2 || index === 3 || index === 5 ? "center" : "right",
+                        fontSize: "9px",
+                      }}
+                    >
+                      {heading}
+                    </th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {items.map((item, index) => {
+                  const qty = Math.max(numberValue(item?.qty), 1);
+                  const amount = numberValue(item?.price);
+                  const rate = amount / qty;
 
-          {/* Totals Section */}
-          <div className="flex justify-end mb-12">
-            <div className="w-full max-w-xs text-right text-sm">
-              <div className="flex justify-between mb-1">
-                <span className="font-semibold">Taxable Value:</span>
-                <span>₹{subTotal.toFixed(2)}</span>
+                  return (
+                    <tr key={item?._id || `${item?.title}-${index}`}>
+                      <td style={{ border: "1px solid #222", padding: "8px 6px", textAlign: "center" }}>{index + 1}</td>
+                      <td style={{ border: "1px solid #222", padding: "8px 6px" }}>
+                        <b>{item?.title || "Product"}</b>
+                        {item?.size ? <div style={{ fontSize: "8px", marginTop: "3px" }}>Size: {item.size}</div> : null}
+                      </td>
+                      <td style={{ border: "1px solid #222", padding: "8px 6px", textAlign: "center" }}>{item?.hsn || "—"}</td>
+                      <td style={{ border: "1px solid #222", padding: "8px 6px", textAlign: "center" }}>{qty}</td>
+                      <td style={{ border: "1px solid #222", padding: "8px 6px", textAlign: "right" }}>{money(rate)}</td>
+                      <td style={{ border: "1px solid #222", padding: "8px 6px", textAlign: "right", fontWeight: 700 }}>{money(amount)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", padding: "18px" }}>
+              <table style={{ width: "300px", borderCollapse: "collapse" }}>
+                <tbody>
+                  <tr>
+                    <td style={{ padding: "5px 0" }}>Subtotal</td>
+                    <td style={{ padding: "5px 0", textAlign: "right" }}>{money(totals.subtotal)}</td>
+                  </tr>
+                  {totals.discount > 0 && (
+                    <tr>
+                      <td style={{ padding: "5px 0" }}>Discount</td>
+                      <td style={{ padding: "5px 0", textAlign: "right" }}>-{money(totals.discount)}</td>
+                    </tr>
+                  )}
+                  <tr>
+                    <td style={{ padding: "5px 0" }}>Shipping</td>
+                    <td style={{ padding: "5px 0", textAlign: "right" }}>{totals.shipping ? money(totals.shipping) : "Free"}</td>
+                  </tr>
+                  <tr>
+                    <td style={{ borderTop: "2px solid #111", padding: "8px 0", fontWeight: 900 }}>TOTAL</td>
+                    <td style={{ borderTop: "2px solid #111", padding: "8px 0", textAlign: "right", fontWeight: 900, fontSize: "14px" }}>
+                      {money(totals.grandTotal)}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div style={{ padding: "0 18px 18px" }}>
+              <div style={{ border: "1px solid #999", padding: "10px", fontSize: "9px", lineHeight: 1.5 }}>
+                <b>Amount in words:</b> {money(totals.grandTotal)} only.
+                <br />
+                <b>Note:</b> This is a computer-generated invoice. Please retain this bill for your records.
               </div>
-              <div className="flex justify-between font-bold text-lg border-t-2 border-gray-400 pt-2 mt-2">
-                <span>Total Invoice Value:</span>
-                <span>₹{totalInvoiceValue.toFixed(2)}</span>
+
+              <div style={{ display: "flex", justifyContent: "space-between", marginTop: "36px" }}>
+                <div>
+                </div>
+
+                <div style={{ textAlign: "right" }}>
+                  <div style={{ fontWeight: 700 }}>For {SELLER.name}</div>
+                  <img src={signSrc} alt="Authorized Signatory" style={{ marginTop: "8px", maxWidth: "120px" }} />
+                  <div style={{ borderTop: "1px solid #555", width: "180px", marginLeft: "auto" }} />
+                  <div style={{ marginTop: "5px", fontSize: "9px" }}>Authorized Signatory</div>
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Authorized Signatory */}
-          <div className="flex justify-end mb-2">
-            <div className="text-right">
-              <p className="font-semibold">FOR Darsh</p>
-              <p className="text-sm">Proprietor - Darsh</p>
-              <div className="mt-8 h-px w-48 bg-gray-400 ml-auto"></div>
-              <p className="font-semibold text-sm mt-2">Authorized Signatory</p>
+            <div style={{ borderTop: "1px solid #222", padding: "8px 18px", textAlign: "center", fontSize: "8px" }}>
+              Thank you for shopping with {SELLER.name}.
             </div>
-          </div>
-
-          {/* Footer Note */}
-          <div className="mt-8 text-xs text-gray-600">
-            <p>Thank you for your business!</p>
-            <p className="mt-1">
-              Note: This is a system-generated invoice and does not require a
-              physical signature.
-            </p>
           </div>
         </div>
       </div>
