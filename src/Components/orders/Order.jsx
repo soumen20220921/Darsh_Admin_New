@@ -33,10 +33,10 @@ import "react-toastify/dist/ReactToastify.css";
 
 const STATUS_CONFIG = {
   New: {
-    label: "ACCEPTED",
+    label: "NEW",
     className:
-      "border-blue-500/30 bg-blue-500/10 text-blue-400 shadow-[0_0_18px_rgba(59,130,246,0.08)]",
-    dot: "bg-blue-400",
+      "border-cyan-500/30 bg-cyan-500/10 text-cyan-400 shadow-[0_0_18px_rgba(34,211,238,0.08)]",
+    dot: "bg-cyan-400",
   },
   Accepted: {
     label: "ACCEPTED",
@@ -44,20 +44,14 @@ const STATUS_CONFIG = {
       "border-blue-500/30 bg-blue-500/10 text-blue-400 shadow-[0_0_18px_rgba(59,130,246,0.08)]",
     dot: "bg-blue-400",
   },
-  Packed: {
-    label: "PACKED",
-    className:
-      "border-violet-500/30 bg-violet-500/10 text-violet-300 shadow-[0_0_18px_rgba(139,92,246,0.08)]",
-    dot: "bg-violet-400",
-  },
   Dispatched: {
     label: "DISPATCHED",
     className:
       "border-amber-500/30 bg-amber-500/10 text-amber-400 shadow-[0_0_18px_rgba(245,158,11,0.08)]",
     dot: "bg-amber-400",
   },
-  Completed: {
-    label: "COMPLETED",
+  Delivered: {
+    label: "DELIVERED",
     className:
       "border-emerald-500/30 bg-emerald-500/10 text-emerald-400 shadow-[0_0_18px_rgba(16,185,129,0.08)]",
     dot: "bg-emerald-400",
@@ -68,16 +62,16 @@ const STATUS_CONFIG = {
       "border-red-500/30 bg-red-500/10 text-red-400 shadow-[0_0_18px_rgba(239,68,68,0.08)]",
     dot: "bg-red-400",
   },
-  Pending: {
-    label: "PENDING",
+  Unpaid: {
+    label: "UNPAID",
     className:
-      "border-amber-500/30 bg-amber-500/10 text-amber-400 shadow-[0_0_18px_rgba(245,158,11,0.08)]",
-    dot: "bg-amber-400",
+      "border-orange-500/30 bg-orange-500/10 text-orange-400 shadow-[0_0_18px_rgba(249,115,22,0.08)]",
+    dot: "bg-orange-400",
   },
 };
 
 const getStatusConfig = (status) =>
-  STATUS_CONFIG[status] || STATUS_CONFIG.Pending;
+  STATUS_CONFIG[status] || STATUS_CONFIG.New;
 
 const StatusBadge = ({ status, compact = false }) => {
   const config = getStatusConfig(status);
@@ -90,7 +84,7 @@ const StatusBadge = ({ status, compact = false }) => {
     >
       <span
         className={`h-1.5 w-1.5 rounded-full ${config.dot} ${
-          status === "Pending" || status === "New" ? "animate-pulse" : ""
+          status === "New" || status === "Unpaid" ? "animate-pulse" : ""
         }`}
       />
       {config.label}
@@ -219,27 +213,39 @@ export default function OrderListDesign() {
       (order) => order.payStatus !== "paid"
     );
 
+    const paidOrdersOnly = safeOrders.filter(
+      (order) => order.payStatus === "paid"
+    );
+
     return {
-      New: paidOrders.filter(
+      "All Orders": safeOrders.length,
+      New: paidOrdersOnly.filter(
         (order) => !order.orderAccept && !order.orderReject
       ).length,
-      Accepted: paidOrders.filter(
-        (order) => order.orderAccept && !order.orderDispatch
-      ).length,
-      Dispatched: paidOrders.filter(
-        (order) => order.orderDispatch && !order.trackingId
-      ).length,
-      Rejected: paidOrders.filter((order) => order.orderReject).length,
-      "All Orders": paidOrders.filter(
+      Accepted: paidOrdersOnly.filter(
         (order) =>
           order.orderAccept &&
-          !order.orderReject &&
+          !order.orderDispatch &&
+          !order.orderReject
+      ).length,
+      Dispatched: paidOrdersOnly.filter(
+        (order) =>
           order.orderDispatch &&
-          order.trackingId !== ""
+          !order.trackingId &&
+          !order.orderReject
+      ).length,
+      Delivered: paidOrdersOnly.filter(
+        (order) =>
+          order.orderDispatch &&
+          !!order.trackingId &&
+          !order.orderReject
+      ).length,
+      Rejected: paidOrdersOnly.filter(
+        (order) => order.orderReject
       ).length,
       Unpaid: unpaidOrders.length,
     };
-  }, [paidOrders, safeOrders]);
+  }, [safeOrders]);
 
   useEffect(() => {
     setTabSignals((previous) => {
@@ -296,8 +302,9 @@ export default function OrderListDesign() {
   };
 
   const getOrderStatus = (order) => {
+    if (order.payStatus !== "paid") return "Unpaid";
     if (order.orderReject) return "Rejected";
-    if (order.orderDispatch && order.trackingId) return "Completed";
+    if (order.orderDispatch && order.trackingId) return "Delivered";
     if (order.orderDispatch) return "Dispatched";
     if (order.orderAccept) return "Accepted";
     return "New";
@@ -309,7 +316,7 @@ export default function OrderListDesign() {
     await new Promise((resolve) => setTimeout(resolve, 900));
 
     try {
-      const ordersToExport = groupedOrders.paid.concat(groupedOrders.unpaid);
+      const ordersToExport = visibleOrders;
 
       if (!ordersToExport.length) {
         toast.info("There are no orders to export", { theme: "dark" });
@@ -431,34 +438,53 @@ export default function OrderListDesign() {
 
   const groupedOrders = useMemo(() => {
     const filtered = safeOrders.filter((order) => {
-      let tabMatch = false;
       const isPaid = order.payStatus === "paid";
+      let tabMatch = false;
 
-      if (activeTab === "Unpaid") {
-        tabMatch = !isPaid;
-      } else {
-        if (!isPaid) return false;
-
-        if (activeTab === "New") {
-          tabMatch = !order.orderAccept && !order.orderReject;
-        } else if (activeTab === "Accepted") {
-          tabMatch = order.orderAccept && !order.orderDispatch;
-        } else if (activeTab === "Rejected") {
-          tabMatch = order.orderReject;
-        } else if (activeTab === "Dispatched") {
-          tabMatch = order.orderDispatch && !order.trackingId;
-        } else if (activeTab === "All Orders") {
-          // All Orders = every paid order, regardless of workflow status.
+      switch (activeTab) {
+        case "All Orders":
           tabMatch = true;
-        } else {
+          break;
+        case "New":
+          tabMatch =
+            isPaid &&
+            !order.orderAccept &&
+            !order.orderReject;
+          break;
+        case "Accepted":
+          tabMatch =
+            isPaid &&
+            order.orderAccept &&
+            !order.orderDispatch &&
+            !order.orderReject;
+          break;
+        case "Dispatched":
+          tabMatch =
+            isPaid &&
+            order.orderDispatch &&
+            !order.trackingId &&
+            !order.orderReject;
+          break;
+        case "Delivered":
+          tabMatch =
+            isPaid &&
+            order.orderDispatch &&
+            !!order.trackingId &&
+            !order.orderReject;
+          break;
+        case "Rejected":
+          tabMatch = isPaid && !!order.orderReject;
+          break;
+        case "Unpaid":
+          tabMatch = !isPaid;
+          break;
+        default:
           tabMatch = true;
-        }
       }
 
       if (!tabMatch) return false;
 
       const search = searchTerm.trim().toLowerCase();
-
       const matchesSearch =
         !search ||
         String(order._id || "")
@@ -487,47 +513,9 @@ export default function OrderListDesign() {
       return matchesSearch && matchesPayment && matchesDate;
     });
 
-    const grouped = filtered.reduce(
-      (acc, order) => {
-        if (order.payStatus === "paid") {
-          acc.paid.push(order);
-        } else {
-          acc.unpaid.push(order);
-        }
-
-        return acc;
-      },
-      { paid: [], unpaid: [] }
-    );
-
-    // UX:
-    // • All Orders  → newest first (today → yesterday → older)
-    // • Every other tab → oldest first (older → yesterday → today)
-    const sortByDate = (a, b) => {
+    return filtered.sort((a, b) => {
       const aTime = new Date(a.orderDate).getTime();
       const bTime = new Date(b.orderDate).getTime();
-
-      const safeA = Number.isFinite(aTime) ? aTime : 0;
-      const safeB = Number.isFinite(bTime) ? bTime : 0;
-
-      return activeTab === "All Orders"
-        ? safeB - safeA
-        : safeA - safeB;
-    };
-
-    grouped.paid.sort(sortByDate);
-    grouped.unpaid.sort(sortByDate);
-
-    return grouped;
-  }, [safeOrders, activeTab, searchTerm, filterPayment, dateRange]);
-
-  const visibleOrders = useMemo(() => {
-    const merged = [...groupedOrders.unpaid, ...groupedOrders.paid];
-
-    return merged.sort((a, b) => {
-      const aTime = new Date(a.orderDate).getTime();
-      const bTime = new Date(b.orderDate).getTime();
-
       const safeA = Number.isFinite(aTime) ? aTime : 0;
       const safeB = Number.isFinite(bTime) ? bTime : 0;
 
@@ -535,7 +523,15 @@ export default function OrderListDesign() {
         ? safeB - safeA
         : safeA - safeB;
     });
-  }, [groupedOrders, activeTab]);
+  }, [
+    safeOrders,
+    activeTab,
+    searchTerm,
+    filterPayment,
+    dateRange,
+  ]);
+
+  const visibleOrders = groupedOrders;
 
   const totalFilteredCount = visibleOrders.length;
 
@@ -548,13 +544,23 @@ export default function OrderListDesign() {
     (order) => order.orderDispatch
   ).length;
 
-  // Workflow-first tab order:
-  // New → Accepted → Dispatched → Rejected → All Orders → Unpaid
+  // Complete order lifecycle: primary workflow first, exceptions last.
+  const TAB_CONFIG = {
+    "All Orders": { icon: ShoppingCart, color: "text-white", activeBg: "bg-white/10" },
+    New: { icon: Package, color: "text-cyan-400", activeBg: "bg-cyan-500/10" },
+    Accepted: { icon: CheckCircle2, color: "text-blue-400", activeBg: "bg-blue-500/10" },
+    Dispatched: { icon: Truck, color: "text-amber-400", activeBg: "bg-amber-500/10" },
+    Delivered: { icon: CheckCircle2, color: "text-emerald-400", activeBg: "bg-emerald-500/10" },
+    Rejected: { icon: X, color: "text-red-400", activeBg: "bg-red-500/10" },
+    Unpaid: { icon: IndianRupee, color: "text-orange-400", activeBg: "bg-orange-500/10" },
+  };
+
   const tabs = [
+    "All Orders",
     "New",
     "Accepted",
     "Dispatched",
-    "All Orders",
+    "Delivered",
     "Rejected",
     "Unpaid",
   ];
@@ -704,23 +710,40 @@ export default function OrderListDesign() {
                 const count = tabCounts[tab] || 0;
                 const active = activeTab === tab;
                 const signal = tabSignals[tab]?.signal;
+                const config = TAB_CONFIG[tab] || {};
+                const TabIcon = config.icon || Package;
+
+                const indicatorColor =
+                  tab === "Delivered"
+                    ? "bg-emerald-400"
+                    : tab === "Rejected"
+                    ? "bg-red-400"
+                    : tab === "Unpaid"
+                    ? "bg-orange-400"
+                    : "bg-blue-400";
 
                 return (
                   <button
                     key={tab}
                     onClick={() => handleTabClick(tab)}
-                    className={`relative flex shrink-0 items-center gap-2 px-3 py-3.5 text-[11px] font-semibold uppercase tracking-wide transition-all duration-300 sm:px-4 ${
+                    className={`group relative flex shrink-0 items-center gap-2 px-3 py-3.5 text-[11px] font-semibold uppercase tracking-wide transition-all duration-300 sm:px-4 ${
                       active
-                        ? "text-blue-400"
-                        : "text-white/40 hover:text-white/75"
+                        ? `${config.color} ${config.activeBg}`
+                        : "text-white/40 hover:bg-white/[0.025] hover:text-white/75"
                     }`}
                   >
-                    {tab}
+                    <TabIcon
+                      className={`h-3.5 w-3.5 transition-transform duration-300 ${
+                        active ? "scale-110" : "group-hover:scale-105"
+                      }`}
+                    />
+
+                    <span>{tab}</span>
 
                     <span
                       className={`min-w-[22px] rounded-full px-1.5 py-0.5 text-center text-[9px] ${
                         active
-                          ? "bg-blue-500/15 text-blue-300"
+                          ? `${config.activeBg} ${config.color}`
                           : "bg-white/[0.05] text-white/35"
                       }`}
                     >
@@ -728,13 +751,15 @@ export default function OrderListDesign() {
                     </span>
 
                     {signal && (
-                      <span className="absolute right-1 top-2 h-1.5 w-1.5 animate-ping rounded-full bg-blue-400" />
+                      <span
+                        className={`absolute right-1 top-2 h-1.5 w-1.5 animate-ping rounded-full ${indicatorColor}`}
+                      />
                     )}
 
                     <span
-                      className={`absolute bottom-0 left-2 right-2 h-0.5 origin-center rounded-full bg-blue-400 transition-all duration-300 ${
+                      className={`absolute bottom-0 left-2 right-2 h-0.5 origin-center rounded-full transition-all duration-300 ${
                         active ? "scale-x-100 opacity-100" : "scale-x-0 opacity-0"
-                      }`}
+                      } ${indicatorColor}`}
                     />
                   </button>
                 );
@@ -830,7 +855,7 @@ export default function OrderListDesign() {
                 </span>{" "}
                 of {safeOrders.length} orders
                 <span className="ml-2 hidden text-white/25 sm:inline">
-                  · {activeTab === "All Orders" ? "Newest first" : "Oldest first"}
+                  · {activeTab === "All Orders" ? "Newest first" : "Oldest pending first"}
                 </span>
               </p>
             </div>
@@ -1366,6 +1391,11 @@ function DesktopOrderRow({
             toast.info(`Opening order #${order._id}`, {
               theme: "dark",
             });
+              window.scrollTo({
+    top: 0,
+    left: 0,
+    behavior: "smooth",
+  });
           }}
           className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-white/10 bg-[#101010] px-3 text-[10px] font-semibold text-white/65 transition-all duration-300 hover:border-blue-500/30 hover:bg-blue-500/10 hover:text-blue-300 hover:shadow-[0_0_20px_rgba(59,130,246,0.08)]"
         >
@@ -1490,6 +1520,11 @@ function MobileOrderCard({
               toast.info(`Opening order #${order._id}`, {
                 theme: "dark",
               });
+                window.scrollTo({
+    top: 0,
+    left: 0,
+    behavior: "smooth",
+  });
             }}
             className="flex h-9 items-center gap-1.5 rounded-xl border border-blue-500/25 bg-blue-500/10 px-3 text-[10px] font-bold text-blue-300 transition hover:bg-blue-500/20"
           >

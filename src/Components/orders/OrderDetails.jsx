@@ -265,6 +265,7 @@ const OrderDetails = ({ order, onClose }) => {
   const [isJourneyPlaying, setIsJourneyPlaying] = useState(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [trackingModalOpen, setTrackingModalOpen] = useState(false);
+  const [trackingViewOpen, setTrackingViewOpen] = useState(false);
   const [trackingInput, setTrackingInput] = useState("");
   const [courierInput, setCourierInput] = useState("");
   const [selectedImage, setSelectedImage] = useState(null);
@@ -289,6 +290,7 @@ const OrderDetails = ({ order, onClose }) => {
       if (event.key === "Escape") {
         setSelectedImage(null);
         setTrackingModalOpen(false);
+        setTrackingViewOpen(false);
         setIsMobileMenuOpen(false);
         setIsShareMenuOpen(false);
       }
@@ -413,8 +415,16 @@ const OrderDetails = ({ order, onClose }) => {
       setLoading(false);
       setTrackingModalOpen(false);
 
+      // Accept / Dispatch / Reject are list-level actions.
+      // Close the details screen immediately after the API succeeds so the
+      // admin returns to the order list with the refreshed status.
+      if (["accept", "dispatch", "reject", "tracking"].includes(action)) {
+        setTimeout(() => onClose?.(), 250);
+        return;
+      }
+
       if (action === "tracking") {
-        setTimeout(() => onClose?.(), 900);
+        setTrackingViewOpen(true);
       }
     } catch (error) {
       setLoading(false);
@@ -1174,11 +1184,21 @@ const OrderDetails = ({ order, onClose }) => {
                         {order?.courierPartner || order?.courier || "Not assigned"}
                       </p>
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <p className="text-[10px] uppercase tracking-wider text-white/35">Tracking ID</p>
-                      <p className="mt-1 truncate font-mono text-xs font-semibold text-amber-300">
-                        {order?.trackingId || "Not added"}
-                      </p>
+                      {order?.trackingId ? (
+                        <button
+                          type="button"
+                          onClick={() => setTrackingViewOpen(true)}
+                          className="mt-1 flex max-w-full items-center gap-1.5 text-left font-mono text-xs font-semibold text-amber-300 transition hover:text-amber-200"
+                          title="Open tracking details"
+                        >
+                          <span className="truncate">{order.trackingId}</span>
+                          <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+                        </button>
+                      ) : (
+                        <p className="mt-1 truncate font-mono text-xs font-semibold text-white/35">Not added</p>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1308,14 +1328,162 @@ const OrderDetails = ({ order, onClose }) => {
         </div>
       )}
 
+      {/* Full-screen tracking details */}
+      {trackingViewOpen && order?.trackingId && (
+        <div
+          className="fixed inset-0 z-[120] overflow-y-auto bg-[#070707]/95 p-0 backdrop-blur-xl sm:p-4"
+          onClick={() => setTrackingViewOpen(false)}
+        >
+          <div
+            className="mx-auto flex min-h-screen w-full max-w-5xl flex-col overflow-hidden border-x border-white/10 bg-[#0d0d0d] shadow-2xl sm:min-h-[calc(100vh-2rem)] sm:rounded-3xl sm:border"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-white/10 bg-[#0d0d0d]/95 px-4 py-4 backdrop-blur-xl sm:px-6">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-amber-400/10 text-amber-300">
+                  <Truck className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-300">Live shipment</p>
+                  <h2 className="truncate text-base font-bold text-white sm:text-lg">Tracking Details</h2>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTrackingViewOpen(false)}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] text-white/60 transition hover:border-white/20 hover:bg-white/[0.06] hover:text-white"
+                aria-label="Close tracking details"
+              >
+                <XCircle className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto">
+              <div className="mx-auto max-w-4xl space-y-4 p-4 sm:space-y-5 sm:p-6 lg:p-8">
+                <section className="overflow-hidden rounded-3xl border border-amber-400/15 bg-gradient-to-br from-amber-400/[0.12] via-[#171717] to-[#111] p-5 shadow-[0_20px_70px_rgba(0,0,0,.28)] sm:p-8">
+                  <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/40">Tracking number</p>
+                      <button
+                        type="button"
+                        onClick={() => copyToClipboard(order.trackingId, "Tracking ID")}
+                        className="mt-2 block max-w-full break-all text-left font-mono text-2xl font-black leading-tight text-amber-300 transition hover:text-amber-200 sm:text-4xl"
+                        title="Copy tracking ID"
+                      >
+                        {order.trackingId}
+                      </button>
+                      <p className="mt-2 text-xs text-white/35">Tap the tracking number to copy it</p>
+                    </div>
+                    <span className="inline-flex w-fit items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-xs font-semibold text-emerald-300">
+                      <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
+                      {progress.label}
+                    </span>
+                  </div>
+                </section>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <section className="rounded-2xl border border-white/10 bg-[#151515] p-5">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">Courier partner</p>
+                    <div className="mt-3 flex items-center gap-3">
+                      <div className="rounded-xl bg-white/[0.05] p-3 text-amber-300">
+                        <Truck className="h-5 w-5" />
+                      </div>
+                      <p className="text-base font-bold text-white">{order?.courierPartner || order?.courier || "Courier not assigned"}</p>
+                    </div>
+                  </section>
+                  <section className="rounded-2xl border border-white/10 bg-[#151515] p-5">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">Order</p>
+                    <p className="mt-3 font-mono text-sm font-semibold text-white">#{String(order?._id || "").slice(-12).toUpperCase()}</p>
+                    <p className="mt-1 text-xs text-white/35">Placed {formatDateTime(order?.orderDate)}</p>
+                  </section>
+                </div>
+
+                <section className="rounded-3xl border border-white/10 bg-[#151515] p-5 sm:p-7">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-300">Shipment journey</p>
+                      <h3 className="mt-1 text-lg font-bold text-white">Order progress</h3>
+                    </div>
+                    <span className="text-xs font-semibold text-white/35">Step {Math.min(Math.max(progress.stage, 1), 4)} / 4</span>
+                  </div>
+
+                  <div className="mt-7 space-y-5">
+                    {journey.map((step) => {
+                      const StepIcon = step.icon;
+                      const complete = progress.stage >= step.stage;
+                      const current = progress.stage === step.stage;
+                      return (
+                        <div key={step.stage} className="flex items-start gap-4">
+                          <div className={`relative flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border ${complete ? "border-amber-400/25 bg-amber-400 text-black" : "border-white/10 bg-[#101010] text-white/25"} ${current ? "amber-glow" : ""}`}>
+                            <StepIcon className="h-5 w-5" />
+                          </div>
+                          <div className="min-w-0 flex-1 pt-0.5">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className={`text-sm font-bold ${complete ? "text-white" : "text-white/35"}`}>{step.label}</p>
+                              {current && <span className="rounded-full bg-amber-400/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-300">Current</span>}
+                            </div>
+                            <p className="mt-1 text-xs text-white/35">{step.description}</p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="mt-7 h-2 overflow-hidden rounded-full bg-white/5">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-amber-400 via-orange-400 to-emerald-400 transition-all duration-700"
+                      style={{ width: `${Math.min((Math.max(progress.stage, 0) / 4) * 100, 100)}%` }}
+                    />
+                  </div>
+                </section>
+
+                <section className="rounded-2xl border border-white/10 bg-[#151515] p-5 sm:p-6">
+                  <div className="flex items-start gap-3">
+                    <MapPin className="mt-0.5 h-5 w-5 shrink-0 text-amber-300" />
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/35">Delivery address</p>
+                      <p className="mt-2 text-sm leading-6 text-white/75">{order?.userShipping?.Add || "Address not available"}</p>
+                      <p className="mt-1 text-xs text-white/35">
+                        {[order?.userShipping?.VillorCity, order?.userShipping?.Dist, order?.userShipping?.State]
+                          .filter(Boolean)
+                          .join(", ")}
+                        {order?.userShipping?.Pin ? ` - ${order.userShipping.Pin}` : ""}
+                      </p>
+                    </div>
+                  </div>
+                </section>
+
+                <div className="flex flex-col-reverse gap-2 pb-2 sm:flex-row sm:justify-end">
+                  <button
+                    type="button"
+                    onClick={() => copyToClipboard(order.trackingId, "Tracking ID")}
+                    className="flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-5 py-3 text-xs font-bold text-white transition hover:bg-white/[0.06]"
+                  >
+                    <Copy className="h-4 w-4" />
+                    Copy Tracking ID
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTrackingViewOpen(false)}
+                    className="flex items-center justify-center gap-2 rounded-xl bg-amber-400 px-5 py-3 text-xs font-bold text-black transition hover:bg-amber-300"
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Tracking modal */}
       {trackingModalOpen && (
         <div
-          className="fixed inset-0 z-[95] flex items-center justify-center bg-black/75 p-4 backdrop-blur-md"
+          className="fixed inset-0 z-[95] flex items-end justify-center bg-black/75 p-0 backdrop-blur-md sm:items-center sm:p-4"
           onClick={() => !loading && setTrackingModalOpen(false)}
         >
           <div
-            className="w-full max-w-md overflow-hidden rounded-2xl border border-white/10 bg-[#171717] shadow-2xl shadow-black/60"
+            className="w-full max-h-[92vh] overflow-y-auto rounded-t-3xl border border-white/10 bg-[#171717] shadow-2xl shadow-black/60 sm:max-w-md sm:rounded-2xl"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">

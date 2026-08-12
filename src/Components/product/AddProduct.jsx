@@ -1524,7 +1524,7 @@ const AddProduct = () => {
             ================================================= */}
             <div className="ap-left">
              {/* Media */}
-              <section className="ap-card ap-media-card">
+              <section className="ap-card ">
                 <div className="ap-card-header">
                   <div className="ap-card-title-wrap">
                     <div className="ap-section-icon">
@@ -1602,7 +1602,7 @@ const AddProduct = () => {
                 </div>
               </section>
               {/* Basic details */}
-              <section className="ap-card ">
+              <section className="ap-card ap-media-card">
                 <div className="ap-card-header">
                   <div className="ap-card-title-wrap">
                     <div className="ap-section-icon">

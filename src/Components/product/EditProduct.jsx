@@ -181,6 +181,10 @@ const EditProduct = ({
     "Pure Silk Replica",
     "Pure Silk",
     "Fancy Saree",
+    "Silk Saree",
+    "Cotton Handloom",
+    "Festive Edit",
+    "All saree",
     "All saree",
   ];
 

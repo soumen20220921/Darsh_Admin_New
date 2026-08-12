@@ -154,7 +154,6 @@ const Product = () => {
     setRefreshing(true);
     try {
       await getProduct();
-      showNotification("Product catalog refreshed.", "success");
     } catch (error) {
       console.error(error);
       showNotification("Failed to refresh products.", "error");
@@ -288,7 +287,6 @@ const Product = () => {
       document.body.removeChild(link);
       window.URL.revokeObjectURL(downloadUrl);
 
-      showNotification("Products exported successfully.", "success");
     } catch (error) {
       console.error(error);
       showNotification("Failed to export products.", "error");
