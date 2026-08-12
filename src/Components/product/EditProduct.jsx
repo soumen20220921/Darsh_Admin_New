@@ -171,31 +171,35 @@ const EditProduct = ({
   ======================================================= */
 
   const categories = [
-    "Kanjivaram",
+    "Pujo Special",
     "Banarasi",
-    "Handloom Cotton",
-    "Bandhani",
-    "Bridal collection",
     "Kanthastitch",
-    "Saraswati Pujo Special",
-    "Pure Silk Replica",
+    "Kanjivaram",
     "Pure Silk",
-    "Fancy Saree",
-    "Silk Saree",
     "Cotton Handloom",
+    "Bandhani",
     "Festive Edit",
-    "All saree",
-    "All saree",
+    "Bridal collection",
+    "Pure Silk Replica",
+    "Fancy Saree",
+    "Handloom Saree",
+    "Other Saree",
   ];
 
   const colors = [
-    "green",
-    "blue",
-    "red",
-    "yellow",
-    "black",
+     "red",
     "white",
+    "yellow",
+    "blue",
+    "black",
+    "green",
     "pink",
+    "orange",
+    "purple",
+    "brown",
+    "grey",
+    "maroon",
+    "beige",
   ];
 
  const blouseOptions = ["yes", "no"];

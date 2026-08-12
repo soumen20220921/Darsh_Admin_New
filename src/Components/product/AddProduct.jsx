@@ -170,29 +170,35 @@ const AddProduct = () => {
   const [notification, setNotification] = useState(null);
 
   const categories = [
-    "Kanjivaram",
-    "Banarasi",
-    "Bandhani",
-    "Bridal collection",
-    "Kanthastitch",
     "Pujo Special",
-    "Pure Silk Replica",
+    "Banarasi",
+    "Kanthastitch",
+    "Kanjivaram",
     "Pure Silk",
-    "Fancy Saree",
-    "Silk Saree",
     "Cotton Handloom",
+    "Bandhani",
     "Festive Edit",
-    "All saree",
+    "Bridal collection",
+    "Pure Silk Replica",
+    "Fancy Saree",
+    "Handloom Saree",
+    "Other Saree",
   ];
 
   const colors = [
-    "green",
-    "blue",
     "red",
-    "yellow",
-    "black",
     "white",
+    "yellow",
+    "blue",
+    "black",
+    "green",
     "pink",
+    "orange",
+    "purple",
+    "brown",
+    "grey",
+    "maroon",
+    "beige",
   ];
 
   const blouseOptions = ["yes", "no"];
