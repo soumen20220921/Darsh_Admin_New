@@ -53,6 +53,18 @@ const SELLER = {
 };
 
 const DEFAULT_SHIPPING = 0;
+const COURIER_OPTIONS = ["DTDC", "India Post"];
+
+const COURIER_TRACKING_URLS = {
+  DTDC: "https://www.dtdc.com/track-your-shipment/",
+  "India Post": "https://www.tracktry.com/couriers/india-post",
+};
+
+const normalizeCourier = (value) => {
+  const courier = String(value || "").trim();
+  return COURIER_OPTIONS.includes(courier) ? courier : "DTDC";
+};
+
 
 const money = (value) =>
   `₹${Number(value || 0).toLocaleString("en-IN", {
@@ -267,7 +279,7 @@ const OrderDetails = ({ order, onClose }) => {
   const [trackingModalOpen, setTrackingModalOpen] = useState(false);
   const [trackingViewOpen, setTrackingViewOpen] = useState(false);
   const [trackingInput, setTrackingInput] = useState("");
-  const [courierInput, setCourierInput] = useState("");
+  const [courierInput, setCourierInput] = useState("DTDC");
   const [selectedImage, setSelectedImage] = useState(null);
   const [notification, setNotification] = useState(null);
   const [copiedField, setCopiedField] = useState("");
@@ -281,8 +293,10 @@ const OrderDetails = ({ order, onClose }) => {
   }, [notification]);
 
   useEffect(() => {
-    setTrackingInput(order?.trackingId || "");
-    setCourierInput(order?.courierPartner || order?.courier || "");
+    setTrackingInput(String(order?.trackingId || "").trim());
+    setCourierInput(
+      normalizeCourier(order?.courierPartner || order?.courier || "DTDC")
+    );
   }, [order]);
 
   useEffect(() => {
@@ -290,6 +304,7 @@ const OrderDetails = ({ order, onClose }) => {
       if (event.key === "Escape") {
         setSelectedImage(null);
         setTrackingModalOpen(false);
+        setTrackingViewOpen(false);
         setIsMobileMenuOpen(false);
         setIsShareMenuOpen(false);
       }
@@ -350,12 +365,6 @@ const OrderDetails = ({ order, onClose }) => {
     setNotification({ type, message });
   };
 
-  const openTrackingEditor = () => {
-    setTrackingInput(order?.trackingId || "");
-    setCourierInput(order?.courierPartner || order?.courier || "");
-    setTrackingModalOpen(true);
-  };
-
   const copyToClipboard = async (text, field) => {
     if (!text) return;
     try {
@@ -399,8 +408,8 @@ const OrderDetails = ({ order, onClose }) => {
         payload = {
           ...order,
           trackingId: trackingInput.trim(),
-          courierPartner: courierInput.trim(),
-          courier: courierInput.trim(),
+          courierPartner: normalizeCourier(courierInput),
+          courier: normalizeCourier(courierInput),
         };
       }
 
@@ -420,16 +429,16 @@ const OrderDetails = ({ order, onClose }) => {
       setLoading(false);
       setTrackingModalOpen(false);
 
-      // Accept / Dispatch / Reject return to the order list.
-      // Tracking is intentionally different: keep Order Details open and
-      // keep the compact Dispatch & Tracking screen in control.
-      if (["accept", "dispatch", "reject"].includes(action)) {
+      // Accept / Dispatch / Reject are list-level actions.
+      // Close the details screen immediately after the API succeeds so the
+      // admin returns to the order list with the refreshed status.
+      if (["accept", "dispatch", "reject", "tracking"].includes(action)) {
         setTimeout(() => onClose?.(), 250);
         return;
       }
 
       if (action === "tracking") {
-        setTrackingModalOpen(false);
+        setTrackingViewOpen(true);
       }
     } catch (error) {
       setLoading(false);
@@ -905,16 +914,6 @@ const OrderDetails = ({ order, onClose }) => {
                       <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold ${getToneClasses(progress.tone)}`}>
                         {progress.label}
                       </span>
-                      {order?.orderDispatch && (
-                        <button
-                          type="button"
-                          onClick={openTrackingEditor}
-                          disabled={loading}
-                          className="rounded-full border border-amber-400/20 bg-amber-400/10 px-2.5 py-1 text-[10px] font-bold text-amber-300 transition hover:bg-amber-400/15 disabled:opacity-50"
-                        >
-                          {order?.trackingId ? "Tracking" : "Add Tracking"}
-                        </button>
-                      )}
                     </div>
                   }
                 >
@@ -967,7 +966,7 @@ const OrderDetails = ({ order, onClose }) => {
                     {order?.orderDispatch ? (
                       <button
                         type="button"
-                        onClick={openTrackingEditor}
+                        onClick={() => setTrackingModalOpen(true)}
                         disabled={loading}
                         className="flex items-center justify-center gap-2 rounded-xl bg-amber-400 px-4 py-3 text-xs font-bold text-black transition hover:bg-amber-300 disabled:opacity-50 sm:col-span-2"
                       >
@@ -1006,6 +1005,149 @@ const OrderDetails = ({ order, onClose }) => {
                         </button>
                       </>
                     )}
+                  </div>
+                </SectionCard>
+              )}
+
+              {/* Dedicated Dispatch & Tracking panel */}
+              {(activeTab === "overview" || activeTab === "shipping") && (
+                <SectionCard
+                  title="Dispatch & Tracking"
+                  icon={Truck}
+                  action={
+                    <span
+                      className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold ${
+                        order?.trackingId
+                          ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-300"
+                          : "border-amber-400/20 bg-amber-400/10 text-amber-300"
+                      }`}
+                    >
+                      {order?.trackingId ? "Tracking Added" : "Not Dispatched"}
+                    </span>
+                  }
+                >
+                  <div className="space-y-4">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-2xl border border-white/10 bg-[#111] p-4">
+                        <div className="flex items-center gap-3">
+                          <div className="rounded-xl bg-amber-400/10 p-3 text-amber-300">
+                            <Truck className="h-5 w-5" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-[10px] uppercase tracking-[0.16em] text-white/35">
+                              Courier partner
+                            </p>
+                            <p className="mt-1 truncate text-sm font-bold text-white">
+                              {order?.courierPartner || order?.courier || "Not assigned"}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="rounded-2xl border border-white/10 bg-[#111] p-4">
+                        <div className="flex items-center gap-3">
+                          <div className="rounded-xl bg-emerald-400/10 p-3 text-emerald-300">
+                            <MapPin className="h-5 w-5" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[10px] uppercase tracking-[0.16em] text-white/35">
+                              Tracking ID
+                            </p>
+                            {order?.trackingId ? (
+                              <button
+                                type="button"
+                                onClick={() => setTrackingViewOpen(true)}
+                                className="mt-1 flex max-w-full items-center gap-1.5 text-left font-mono text-sm font-bold text-amber-300 hover:text-amber-200"
+                              >
+                                <span className="truncate">{order.trackingId}</span>
+                                <ChevronRight className="h-4 w-4 shrink-0" />
+                              </button>
+                            ) : (
+                              <p className="mt-1 text-sm font-semibold text-white/30">
+                                Not added
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-amber-400/15 bg-gradient-to-br from-amber-400/[0.08] via-[#151515] to-[#101010] p-4 sm:p-5">
+                      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="h-2 w-2 animate-pulse rounded-full bg-amber-400" />
+                            <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-300">
+                              Dispatch control
+                            </p>
+                          </div>
+                          <p className="mt-1 text-xs leading-5 text-white/40">
+                            Dispatch the paid order first, then add or update courier and tracking information.
+                          </p>
+                        </div>
+
+                        <div className="flex w-full flex-col gap-2 sm:flex-row lg:w-auto">
+                          {!order?.orderDispatch && !order?.orderReject && (
+                            <button
+                              type="button"
+                              onClick={() => acceptOrReject(order._id, "dispatch")}
+                              disabled={loading || !order?.orderAccept}
+                              className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-amber-400 px-4 py-3 text-xs font-bold text-black transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-40 sm:flex-none"
+                              title={!order?.orderAccept ? "Accept the order before dispatching" : "Dispatch order"}
+                            >
+                              {loading ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Truck className="h-4 w-4" />
+                              )}
+                              Dispatch Order
+                            </button>
+                          )}
+
+                          {order?.orderDispatch && (
+                            <button
+                              type="button"
+                              onClick={() => setTrackingModalOpen(true)}
+                              disabled={loading}
+                              className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-amber-400 px-4 py-3 text-xs font-bold text-black transition hover:-translate-y-0.5 hover:bg-amber-300 disabled:opacity-50 sm:flex-none"
+                            >
+                              <MapPin className="h-4 w-4" />
+                              {order?.trackingId ? "Update Tracking" : "Add Tracking"}
+                            </button>
+                          )}
+
+                          {order?.trackingId && (
+                            <button
+                              type="button"
+                              onClick={() => setTrackingViewOpen(true)}
+                              className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-xs font-semibold text-white transition hover:border-amber-400/25 hover:bg-amber-400/5 sm:flex-none"
+                            >
+                              <Eye className="h-4 w-4 text-amber-300" />
+                              View Tracking
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      <div className="rounded-xl border border-white/5 bg-[#111] px-3 py-3">
+                        <p className="text-[10px] uppercase tracking-wider text-white/30">Order status</p>
+                        <p className="mt-1 text-xs font-semibold text-white">{progress.label}</p>
+                      </div>
+                      <div className="rounded-xl border border-white/5 bg-[#111] px-3 py-3">
+                        <p className="text-[10px] uppercase tracking-wider text-white/30">Dispatch</p>
+                        <p className={`mt-1 text-xs font-semibold ${order?.orderDispatch ? "text-emerald-300" : "text-white/40"}`}>
+                          {order?.orderDispatch ? "Dispatched" : "Waiting"}
+                        </p>
+                      </div>
+                      <div className="rounded-xl border border-white/5 bg-[#111] px-3 py-3">
+                        <p className="text-[10px] uppercase tracking-wider text-white/30">Tracking</p>
+                        <p className={`mt-1 truncate text-xs font-semibold ${order?.trackingId ? "text-emerald-300" : "text-white/40"}`}>
+                          {order?.trackingId || "Not added"}
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 </SectionCard>
               )}
@@ -1186,6 +1328,48 @@ const OrderDetails = ({ order, onClose }) => {
                 </div>
               </SectionCard>
 
+              <SectionCard
+                title="Shipment Summary"
+                icon={Truck}
+                action={order?.trackingId ? <span className="h-2 w-2 rounded-full bg-emerald-400" /> : null}
+              >
+                <div className="rounded-xl border border-white/10 bg-[#111] p-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wider text-white/35">Courier</p>
+                      <p className="mt-1 text-xs font-semibold text-white">
+                        {order?.courierPartner || order?.courier || "Not assigned"}
+                      </p>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[10px] uppercase tracking-wider text-white/35">Tracking ID</p>
+                      {order?.trackingId ? (
+                        <button
+                          type="button"
+                          onClick={() => setTrackingViewOpen(true)}
+                          className="mt-1 flex max-w-full items-center gap-1.5 text-left font-mono text-xs font-semibold text-amber-300 transition hover:text-amber-200"
+                          title="Open tracking details"
+                        >
+                          <span className="truncate">{order.trackingId}</span>
+                          <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+                        </button>
+                      ) : (
+                        <p className="mt-1 truncate font-mono text-xs font-semibold text-white/35">Not added</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setTrackingModalOpen(true)}
+                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-xs font-semibold text-white transition hover:border-amber-400/25 hover:bg-amber-400/5"
+                >
+                  <MapPin className="h-4 w-4 text-amber-300" />
+                  {order?.trackingId ? "Update Tracking" : "Add Tracking"}
+                </button>
+              </SectionCard>
+
               <SectionCard title="GST Billing Summary" icon={Landmark}>
                 <div className="space-y-2">
                   <div className="flex justify-between text-xs">
@@ -1301,199 +1485,219 @@ const OrderDetails = ({ order, onClose }) => {
         </div>
       )}
 
-      {/* =====================================================
-          COMPACT DISPATCH & TRACKING SCREEN
-          Only this small responsive dialog is visible when opened.
-          ===================================================== */}
-      {trackingModalOpen && (
+      {/* Compact tracking details popup */}
+      {trackingViewOpen && order?.trackingId && (
         <div
-          className="fixed inset-0 z-[95] flex items-center justify-center bg-black/70 p-3 backdrop-blur-md sm:p-5"
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 p-3 backdrop-blur-sm sm:p-5"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setTrackingViewOpen(false);
+          }}
           role="dialog"
           aria-modal="true"
-          aria-labelledby="dispatch-tracking-title"
-          onClick={() => !loading && setTrackingModalOpen(false)}
         >
-          <div
-            className="flex max-h-[min(92dvh,620px)] w-full max-w-[440px] flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#151515] shadow-[0_30px_100px_rgba(0,0,0,.65)] sm:rounded-3xl"
-            onClick={(event) => event.stopPropagation()}
-          >
-            {/* Compact header */}
-            <div className="flex items-center justify-between gap-3 border-b border-white/10 bg-[#171717] px-4 py-3.5 sm:px-5 sm:py-4">
+          <div className="w-full max-w-md overflow-hidden rounded-3xl border border-white/10 bg-[#141414] shadow-[0_30px_100px_rgba(0,0,0,.65)]">
+            <div className="h-1 bg-gradient-to-r from-amber-400 via-orange-400 to-emerald-400" />
+            <div className="flex items-center justify-between border-b border-white/10 px-4 py-4 sm:px-5">
               <div className="flex min-w-0 items-center gap-3">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-400/10 text-amber-300">
                   <Truck className="h-5 w-5" />
                 </div>
                 <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h2 id="dispatch-tracking-title" className="truncate text-sm font-bold text-white sm:text-base">
-                      Dispatch & Tracking
-                    </h2>
-                    <span className="hidden rounded-full border border-amber-400/20 bg-amber-400/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-300 sm:inline">
-                      Compact
-                    </span>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-300">Shipment</p>
+                  <h2 className="truncate text-sm font-bold text-white">Tracking Details</h2>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTrackingViewOpen(false)}
+                className="rounded-xl border border-white/10 bg-white/[0.03] p-2 text-white/45 hover:text-white"
+              >
+                <XCircle className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3 p-4 sm:p-5">
+              <div className="rounded-2xl border border-amber-400/15 bg-amber-400/[0.05] p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[10px] uppercase tracking-[0.16em] text-white/35">Tracking ID</p>
+                    <p className="mt-2 break-all font-mono text-base font-black text-amber-300 sm:text-lg">
+                      {order.trackingId}
+                    </p>
                   </div>
-                  <p className="mt-0.5 text-[10px] text-white/35">
-                    {order?.trackingId ? "Update shipment details" : "Add shipment details"}
+                  <span className="shrink-0 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2.5 py-1 text-[9px] font-bold text-emerald-300">
+                    Active
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-xl border border-white/10 bg-[#101010] p-3">
+                  <p className="text-[9px] uppercase tracking-wider text-white/30">Courier</p>
+                  <p className="mt-1 truncate text-xs font-bold text-white">
+                    {normalizeCourier(order?.courierPartner || order?.courier)}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-[#101010] p-3">
+                  <p className="text-[9px] uppercase tracking-wider text-white/30">Order</p>
+                  <p className="mt-1 truncate font-mono text-xs font-bold text-white">
+                    #{String(order?._id || "").slice(-8).toUpperCase()}
                   </p>
                 </div>
               </div>
 
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <button
+                  type="button"
+                  onClick={() => copyToClipboard(order.trackingId, "Tracking ID")}
+                  className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-xs font-bold text-white hover:bg-white/[0.06]"
+                >
+                  <Copy className="h-4 w-4" />
+                  Copy Tracking ID
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const courier = normalizeCourier(order?.courierPartner || order?.courier);
+                    window.open(
+                      COURIER_TRACKING_URLS[courier],
+                      "_blank",
+                      "noopener,noreferrer"
+                    );
+                  }}
+                  className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-amber-400 px-4 py-3 text-xs font-black text-black hover:bg-amber-300"
+                >
+                  <MapPin className="h-4 w-4" />
+                  Open Tracking
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Compact Add / Update Tracking popup */}
+      {trackingModalOpen && (
+        <div
+          className="fixed inset-0 z-[125] flex items-center justify-center bg-black/70 p-3 backdrop-blur-sm sm:p-5"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !loading) setTrackingModalOpen(false);
+          }}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="w-full max-w-md overflow-hidden rounded-3xl border border-white/10 bg-[#141414] shadow-[0_30px_100px_rgba(0,0,0,.65)]">
+            <div className="h-1 bg-gradient-to-r from-amber-400 via-orange-400 to-amber-300" />
+
+            <div className="flex items-center justify-between border-b border-white/10 px-4 py-4 sm:px-5">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-400/10 text-amber-300">
+                  <Truck className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <h2 className="text-sm font-bold text-white sm:text-base">
+                    {order?.trackingId ? "Update Tracking" : "Add Tracking"}
+                  </h2>
+                  <p className="mt-0.5 text-[10px] text-white/35">
+                    Only DTDC and India Post
+                  </p>
+                </div>
+              </div>
               <button
                 type="button"
-                onClick={() => setTrackingModalOpen(false)}
+                onClick={() => !loading && setTrackingModalOpen(false)}
                 disabled={loading}
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] text-white/45 transition hover:bg-white/[0.07] hover:text-white disabled:opacity-40"
-                aria-label="Close dispatch and tracking"
+                className="rounded-xl border border-white/10 bg-white/[0.03] p-2 text-white/45 hover:text-white disabled:opacity-40"
               >
-                <XCircle className="h-5 w-5" />
+                <XCircle className="h-4 w-4" />
               </button>
             </div>
 
-            {/* Compact content */}
-            <div className="min-h-0 overflow-y-auto scrollbar-dark">
-              <div className="space-y-3.5 p-4 sm:p-5">
-                {/* Order mini summary */}
+            <form
+              className="space-y-4 p-4 sm:p-5"
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (!trackingInput.trim()) {
+                  showNotification("error", "Enter a tracking number");
+                  return;
+                }
+                acceptOrReject(order._id, "tracking");
+              }}
+            >
+              <div>
+                <label className="mb-2 block text-[10px] font-bold uppercase tracking-[0.16em] text-white/40">
+                  Courier Partner
+                </label>
                 <div className="grid grid-cols-2 gap-2">
-                  <div className="min-w-0 rounded-xl border border-white/10 bg-[#101010] px-3 py-2.5">
-                    <p className="text-[9px] uppercase tracking-[0.14em] text-white/30">Order</p>
-                    <p className="mt-1 truncate font-mono text-xs font-bold text-white">
-                      #{String(order?._id || "").slice(-8).toUpperCase()}
-                    </p>
-                  </div>
-
-                  <div className="min-w-0 rounded-xl border border-white/10 bg-[#101010] px-3 py-2.5">
-                    <p className="text-[9px] uppercase tracking-[0.14em] text-white/30">Status</p>
-                    <p className={`mt-1 truncate text-xs font-bold ${
-                      progress.tone === "green"
-                        ? "text-emerald-300"
-                        : progress.tone === "red"
-                        ? "text-red-300"
-                        : "text-amber-300"
-                    }`}>
-                      {progress.label}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Courier */}
-                <label className="block">
-                  <span className="mb-1.5 flex items-center justify-between text-[11px] font-semibold text-white/60">
-                    <span>Courier partner</span>
-                    <span className="text-[9px] text-white/25">Required for shipment</span>
-                  </span>
-                  <div className="relative">
-                    <Truck className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-amber-300/50" />
-                    <select
-                      value={courierInput}
-                      onChange={(event) => setCourierInput(event.target.value)}
-                      className="h-11 w-full appearance-none rounded-xl border border-white/10 bg-[#0d0d0d] pl-9 pr-9 text-xs font-medium text-white outline-none transition focus:border-amber-400/40 focus:ring-2 focus:ring-amber-400/5"
-                    >
-                      <option value="">Select courier</option>
-                      <option value="DTDC">DTDC</option>
-                      <option value="India Post">India Post</option>
-                    </select>
-                    <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/25" />
-                  </div>
-                </label>
-
-                {/* Tracking ID */}
-                <label className="block">
-                  <span className="mb-1.5 flex items-center justify-between text-[11px] font-semibold text-white/60">
-                    <span>Tracking ID</span>
-                    <span className="text-[9px] text-white/25">Paste exact courier ID</span>
-                  </span>
-                  <div className="relative">
-                    <Hash className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-amber-300/50" />
-                    <input
-                      value={trackingInput}
-                      onChange={(event) => setTrackingInput(event.target.value)}
-                      placeholder="e.g. TRK123456789"
-                      autoComplete="off"
-                      spellCheck="false"
-                      className="h-11 w-full rounded-xl border border-white/10 bg-[#0d0d0d] pl-9 pr-10 font-mono text-xs font-semibold text-white outline-none transition placeholder:text-white/20 focus:border-amber-400/40 focus:ring-2 focus:ring-amber-400/5"
-                    />
-                    {trackingInput && (
+                  {COURIER_OPTIONS.map((courier) => {
+                    const active = normalizeCourier(courierInput) === courier;
+                    return (
                       <button
+                        key={courier}
                         type="button"
-                        onClick={() => setTrackingInput("")}
+                        onClick={() => setCourierInput(courier)}
                         disabled={loading}
-                        className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-lg text-white/30 transition hover:bg-white/5 hover:text-white"
-                        aria-label="Clear tracking ID"
+                        className={`flex min-h-12 items-center justify-center gap-2 rounded-xl border px-3 py-3 text-xs font-bold transition ${
+                          active
+                            ? "border-amber-400/50 bg-amber-400 text-black shadow-lg shadow-amber-400/10"
+                            : "border-white/10 bg-white/[0.03] text-white/55 hover:bg-white/[0.06] hover:text-white"
+                        } disabled:opacity-50`}
                       >
-                        <XCircle className="h-4 w-4" />
+                        <Truck className="h-4 w-4" />
+                        {courier}
                       </button>
-                    )}
-                  </div>
-                </label>
-
-                {/* Existing tracking preview */}
-                {order?.trackingId && (
-                  <div className="rounded-xl border border-emerald-400/15 bg-emerald-400/[0.05] p-3">
-                    <div className="flex items-start gap-2.5">
-                      <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300" />
-                      <div className="min-w-0">
-                        <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-emerald-300/70">
-                          Current tracking
-                        </p>
-                        <p className="mt-1 break-all font-mono text-xs font-bold text-white">
-                          {order.trackingId}
-                        </p>
-                        <p className="mt-1 text-[9px] text-white/30">
-                          Courier: {order?.courierPartner || order?.courier || "Not assigned"}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Actions */}
-                <div className="flex gap-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => setTrackingModalOpen(false)}
-                    disabled={loading}
-                    className="min-h-11 flex-1 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-3 text-xs font-semibold text-white/60 transition hover:bg-white/[0.07] hover:text-white disabled:opacity-40"
-                  >
-                    Cancel
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!courierInput.trim()) {
-                        showNotification("error", "Select a courier partner");
-                        return;
-                      }
-
-                      if (!trackingInput.trim()) {
-                        showNotification("error", "Enter a tracking ID");
-                        return;
-                      }
-
-                      acceptOrReject(order._id, "tracking");
-                    }}
-                    disabled={loading}
-                    className="min-h-11 flex-[1.35] rounded-xl bg-amber-400 px-3 py-3 text-xs font-black text-black shadow-lg shadow-amber-400/10 transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {loading ? (
-                      <span className="flex items-center justify-center gap-2">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Saving...
-                      </span>
-                    ) : (
-                      <span className="flex items-center justify-center gap-2">
-                        <CheckCircle className="h-4 w-4" />
-                        {order?.trackingId ? "Update Tracking" : "Save Tracking"}
-                      </span>
-                    )}
-                  </button>
+                    );
+                  })}
                 </div>
-
-                <p className="px-1 text-center text-[9px] leading-4 text-white/25">
-                  This compact panel stays on the current Order Details screen. No full-page tracking screen will open.
-                </p>
               </div>
-            </div>
+
+              <div>
+                <label htmlFor="tracking-id-input" className="mb-2 block text-[10px] font-bold uppercase tracking-[0.16em] text-white/40">
+                  Tracking ID
+                </label>
+                <div className="relative">
+                  <MapPin className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-white/25" />
+                  <input
+                    id="tracking-id-input"
+                    value={trackingInput}
+                    onChange={(event) => setTrackingInput(event.target.value.replace(/\s+/g, " ").trimStart())}
+                    placeholder="Enter tracking / AWB number"
+                    autoComplete="off"
+                    autoCapitalize="characters"
+                    disabled={loading}
+                    className="h-12 w-full rounded-xl border border-white/10 bg-[#0d0d0d] pl-10 pr-3 font-mono text-sm font-semibold tracking-wide text-white outline-none placeholder:text-white/20 focus:border-amber-400/40 focus:ring-2 focus:ring-amber-400/10 disabled:opacity-50"
+                  />
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-white/5 bg-[#0e0e0e] px-3 py-2.5">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-[10px] text-white/35">Tracking page</span>
+                  <span className="truncate text-[10px] font-medium text-white/55">
+                    {COURIER_TRACKING_URLS[normalizeCourier(courierInput)]}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => setTrackingModalOpen(false)}
+                  disabled={loading}
+                  className="min-h-11 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-xs font-semibold text-white/60 hover:bg-white/[0.06] hover:text-white disabled:opacity-40"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading || !trackingInput.trim()}
+                  className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-amber-400 px-5 py-3 text-xs font-bold text-black hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-40 sm:flex-none"
+                >
+                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
+                  {loading ? "Saving..." : order?.trackingId ? "Update Tracking" : "Save Tracking"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
@@ -1607,7 +1811,7 @@ const OrderDetails = ({ order, onClose }) => {
                         <b>{item?.title || "Product"}</b>
                         {item?.size ? <div style={{ fontSize: "8px", marginTop: "3px" }}>Size: {item.size}</div> : null}
                       </td>
-                      <td style={{ border: "1px solid #222", padding: "8px 6px", textAlign: "center" }}>{item?.hsn || "—"}</td>
+                      <td style={{ border: "1px solid #222", padding: "8px 6px", textAlign: "center" }}>{item?.hsn || "5407"}</td>
                       <td style={{ border: "1px solid #222", padding: "8px 6px", textAlign: "center" }}>{qty}</td>
                       <td style={{ border: "1px solid #222", padding: "8px 6px", textAlign: "right" }}>{money(rate)}</td>
                       <td style={{ border: "1px solid #222", padding: "8px 6px", textAlign: "right", fontWeight: 700 }}>{money(amount)}</td>
