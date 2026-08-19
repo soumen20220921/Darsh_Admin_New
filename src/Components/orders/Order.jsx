@@ -218,7 +218,7 @@ export default function OrderListDesign() {
     );
 
     return {
-      "All Orders": safeOrders.length,
+      "All Orders": paidOrdersOnly.length,
       New: paidOrdersOnly.filter(
         (order) => !order.orderAccept && !order.orderReject
       ).length,
@@ -443,7 +443,7 @@ export default function OrderListDesign() {
 
       switch (activeTab) {
         case "All Orders":
-          tabMatch = true;
+          tabMatch = isPaid;
           break;
         case "New":
           tabMatch =

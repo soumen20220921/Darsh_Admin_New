@@ -97,6 +97,72 @@ const Product = () => {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
+  // Dashboard -> Product deep link.
+  // Wait for products to load, then open the exact matching product.
+  // The localStorage fallback is important because the Product component can
+  // mount after the dashboard changes tabs.
+  useEffect(() => {
+    let saved = null;
+    try {
+      saved = JSON.parse(
+        localStorage.getItem("darsh:dashboard-stock-product") || "null"
+      );
+    } catch (error) {
+      saved = null;
+    }
+
+    if (!saved?.id || !Array.isArray(allProduct) || !allProduct.length) return;
+
+    const match = allProduct.find(
+      (product) =>
+        String(product?._id || product?.id) === String(saved.id)
+    );
+
+    if (!match) return;
+
+    setSelectedProduct(match);
+    setCurrentView("view");
+    setSearchTerm(match.productName || "");
+
+    try {
+      localStorage.removeItem("darsh:dashboard-stock-product");
+    } catch (error) {
+      // Ignore storage cleanup errors.
+    }
+
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+  }, [allProduct]);
+
+  // Also support a same-tab dashboard event.
+  useEffect(() => {
+    const handleDashboardProduct = (event) => {
+      const productId = event?.detail?.productId || event?.detail?.id;
+      if (!productId || !Array.isArray(allProduct)) return;
+
+      const match = allProduct.find(
+        (product) =>
+          String(product?._id || product?.id) === String(productId)
+      );
+
+      if (!match) return;
+
+      setSelectedProduct(match);
+      setCurrentView("view");
+      setSearchTerm(match.productName || "");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+
+      try {
+        localStorage.removeItem("darsh:dashboard-stock-product");
+      } catch (error) {}
+    };
+
+    window.addEventListener("darsh:open-stock-product", handleDashboardProduct);
+    return () =>
+      window.removeEventListener("darsh:open-stock-product", handleDashboardProduct);
+  }, [allProduct]);
+
   const showNotification = useCallback((message, type = "success") => {
     setNotification({ message, type });
   }, []);

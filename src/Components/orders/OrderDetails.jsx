@@ -290,7 +290,6 @@ const OrderDetails = ({ order, onClose }) => {
       if (event.key === "Escape") {
         setSelectedImage(null);
         setTrackingModalOpen(false);
-        setTrackingViewOpen(false);
         setIsMobileMenuOpen(false);
         setIsShareMenuOpen(false);
       }
@@ -349,6 +348,12 @@ const OrderDetails = ({ order, onClose }) => {
 
   const showNotification = (type, message) => {
     setNotification({ type, message });
+  };
+
+  const openTrackingEditor = () => {
+    setTrackingInput(order?.trackingId || "");
+    setCourierInput(order?.courierPartner || order?.courier || "");
+    setTrackingModalOpen(true);
   };
 
   const copyToClipboard = async (text, field) => {
@@ -415,16 +420,16 @@ const OrderDetails = ({ order, onClose }) => {
       setLoading(false);
       setTrackingModalOpen(false);
 
-      // Accept / Dispatch / Reject are list-level actions.
-      // Close the details screen immediately after the API succeeds so the
-      // admin returns to the order list with the refreshed status.
-      if (["accept", "dispatch", "reject", "tracking"].includes(action)) {
+      // Accept / Dispatch / Reject return to the order list.
+      // Tracking is intentionally different: keep Order Details open and
+      // keep the compact Dispatch & Tracking screen in control.
+      if (["accept", "dispatch", "reject"].includes(action)) {
         setTimeout(() => onClose?.(), 250);
         return;
       }
 
       if (action === "tracking") {
-        setTrackingViewOpen(true);
+        setTrackingModalOpen(false);
       }
     } catch (error) {
       setLoading(false);
@@ -900,6 +905,16 @@ const OrderDetails = ({ order, onClose }) => {
                       <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold ${getToneClasses(progress.tone)}`}>
                         {progress.label}
                       </span>
+                      {order?.orderDispatch && (
+                        <button
+                          type="button"
+                          onClick={openTrackingEditor}
+                          disabled={loading}
+                          className="rounded-full border border-amber-400/20 bg-amber-400/10 px-2.5 py-1 text-[10px] font-bold text-amber-300 transition hover:bg-amber-400/15 disabled:opacity-50"
+                        >
+                          {order?.trackingId ? "Tracking" : "Add Tracking"}
+                        </button>
+                      )}
                     </div>
                   }
                 >
@@ -952,7 +967,7 @@ const OrderDetails = ({ order, onClose }) => {
                     {order?.orderDispatch ? (
                       <button
                         type="button"
-                        onClick={() => setTrackingModalOpen(true)}
+                        onClick={openTrackingEditor}
                         disabled={loading}
                         className="flex items-center justify-center gap-2 rounded-xl bg-amber-400 px-4 py-3 text-xs font-bold text-black transition hover:bg-amber-300 disabled:opacity-50 sm:col-span-2"
                       >
@@ -1171,48 +1186,6 @@ const OrderDetails = ({ order, onClose }) => {
                 </div>
               </SectionCard>
 
-              <SectionCard
-                title="Dispatch & Tracking"
-                icon={Truck}
-                action={order?.trackingId ? <span className="h-2 w-2 rounded-full bg-emerald-400" /> : null}
-              >
-                <div className="rounded-xl border border-white/10 bg-[#111] p-4">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <p className="text-[10px] uppercase tracking-wider text-white/35">Courier</p>
-                      <p className="mt-1 text-xs font-semibold text-white">
-                        {order?.courierPartner || order?.courier || "Not assigned"}
-                      </p>
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-[10px] uppercase tracking-wider text-white/35">Tracking ID</p>
-                      {order?.trackingId ? (
-                        <button
-                          type="button"
-                          onClick={() => setTrackingViewOpen(true)}
-                          className="mt-1 flex max-w-full items-center gap-1.5 text-left font-mono text-xs font-semibold text-amber-300 transition hover:text-amber-200"
-                          title="Open tracking details"
-                        >
-                          <span className="truncate">{order.trackingId}</span>
-                          <ChevronRight className="h-3.5 w-3.5 shrink-0" />
-                        </button>
-                      ) : (
-                        <p className="mt-1 truncate font-mono text-xs font-semibold text-white/35">Not added</p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setTrackingModalOpen(true)}
-                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-xs font-semibold text-white transition hover:border-amber-400/25 hover:bg-amber-400/5"
-                >
-                  <MapPin className="h-4 w-4 text-amber-300" />
-                  {order?.trackingId ? "Update Tracking" : "Add Tracking"}
-                </button>
-              </SectionCard>
-
               <SectionCard title="GST Billing Summary" icon={Landmark}>
                 <div className="space-y-2">
                   <div className="flex justify-between text-xs">
@@ -1328,238 +1301,197 @@ const OrderDetails = ({ order, onClose }) => {
         </div>
       )}
 
-      {/* Full-screen tracking details */}
-      {trackingViewOpen && order?.trackingId && (
-        <div
-          className="fixed inset-0 z-[120] overflow-y-auto bg-[#070707]/95 p-0 backdrop-blur-xl sm:p-4"
-          onClick={() => setTrackingViewOpen(false)}
-        >
-          <div
-            className="mx-auto flex min-h-screen w-full max-w-5xl flex-col overflow-hidden border-x border-white/10 bg-[#0d0d0d] shadow-2xl sm:min-h-[calc(100vh-2rem)] sm:rounded-3xl sm:border"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-white/10 bg-[#0d0d0d]/95 px-4 py-4 backdrop-blur-xl sm:px-6">
-              <div className="flex min-w-0 items-center gap-3">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-amber-400/10 text-amber-300">
-                  <Truck className="h-5 w-5" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-300">Live shipment</p>
-                  <h2 className="truncate text-base font-bold text-white sm:text-lg">Tracking Details</h2>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setTrackingViewOpen(false)}
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] text-white/60 transition hover:border-white/20 hover:bg-white/[0.06] hover:text-white"
-                aria-label="Close tracking details"
-              >
-                <XCircle className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto">
-              <div className="mx-auto max-w-4xl space-y-4 p-4 sm:space-y-5 sm:p-6 lg:p-8">
-                <section className="overflow-hidden rounded-3xl border border-amber-400/15 bg-gradient-to-br from-amber-400/[0.12] via-[#171717] to-[#111] p-5 shadow-[0_20px_70px_rgba(0,0,0,.28)] sm:p-8">
-                  <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
-                    <div className="min-w-0">
-                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/40">Tracking number</p>
-                      <button
-                        type="button"
-                        onClick={() => copyToClipboard(order.trackingId, "Tracking ID")}
-                        className="mt-2 block max-w-full break-all text-left font-mono text-2xl font-black leading-tight text-amber-300 transition hover:text-amber-200 sm:text-4xl"
-                        title="Copy tracking ID"
-                      >
-                        {order.trackingId}
-                      </button>
-                      <p className="mt-2 text-xs text-white/35">Tap the tracking number to copy it</p>
-                    </div>
-                    <span className="inline-flex w-fit items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-xs font-semibold text-emerald-300">
-                      <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
-                      {progress.label}
-                    </span>
-                  </div>
-                </section>
-
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <section className="rounded-2xl border border-white/10 bg-[#151515] p-5">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">Courier partner</p>
-                    <div className="mt-3 flex items-center gap-3">
-                      <div className="rounded-xl bg-white/[0.05] p-3 text-amber-300">
-                        <Truck className="h-5 w-5" />
-                      </div>
-                      <p className="text-base font-bold text-white">{order?.courierPartner || order?.courier || "Courier not assigned"}</p>
-                    </div>
-                  </section>
-                  <section className="rounded-2xl border border-white/10 bg-[#151515] p-5">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">Order</p>
-                    <p className="mt-3 font-mono text-sm font-semibold text-white">#{String(order?._id || "").slice(-12).toUpperCase()}</p>
-                    <p className="mt-1 text-xs text-white/35">Placed {formatDateTime(order?.orderDate)}</p>
-                  </section>
-                </div>
-
-                <section className="rounded-3xl border border-white/10 bg-[#151515] p-5 sm:p-7">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-300">Shipment journey</p>
-                      <h3 className="mt-1 text-lg font-bold text-white">Order progress</h3>
-                    </div>
-                    <span className="text-xs font-semibold text-white/35">Step {Math.min(Math.max(progress.stage, 1), 4)} / 4</span>
-                  </div>
-
-                  <div className="mt-7 space-y-5">
-                    {journey.map((step) => {
-                      const StepIcon = step.icon;
-                      const complete = progress.stage >= step.stage;
-                      const current = progress.stage === step.stage;
-                      return (
-                        <div key={step.stage} className="flex items-start gap-4">
-                          <div className={`relative flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border ${complete ? "border-amber-400/25 bg-amber-400 text-black" : "border-white/10 bg-[#101010] text-white/25"} ${current ? "amber-glow" : ""}`}>
-                            <StepIcon className="h-5 w-5" />
-                          </div>
-                          <div className="min-w-0 flex-1 pt-0.5">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <p className={`text-sm font-bold ${complete ? "text-white" : "text-white/35"}`}>{step.label}</p>
-                              {current && <span className="rounded-full bg-amber-400/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-300">Current</span>}
-                            </div>
-                            <p className="mt-1 text-xs text-white/35">{step.description}</p>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  <div className="mt-7 h-2 overflow-hidden rounded-full bg-white/5">
-                    <div
-                      className="h-full rounded-full bg-gradient-to-r from-amber-400 via-orange-400 to-emerald-400 transition-all duration-700"
-                      style={{ width: `${Math.min((Math.max(progress.stage, 0) / 4) * 100, 100)}%` }}
-                    />
-                  </div>
-                </section>
-
-                <section className="rounded-2xl border border-white/10 bg-[#151515] p-5 sm:p-6">
-                  <div className="flex items-start gap-3">
-                    <MapPin className="mt-0.5 h-5 w-5 shrink-0 text-amber-300" />
-                    <div className="min-w-0">
-                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/35">Delivery address</p>
-                      <p className="mt-2 text-sm leading-6 text-white/75">{order?.userShipping?.Add || "Address not available"}</p>
-                      <p className="mt-1 text-xs text-white/35">
-                        {[order?.userShipping?.VillorCity, order?.userShipping?.Dist, order?.userShipping?.State]
-                          .filter(Boolean)
-                          .join(", ")}
-                        {order?.userShipping?.Pin ? ` - ${order.userShipping.Pin}` : ""}
-                      </p>
-                    </div>
-                  </div>
-                </section>
-
-                <div className="flex flex-col-reverse gap-2 pb-2 sm:flex-row sm:justify-end">
-                  <button
-                    type="button"
-                    onClick={() => copyToClipboard(order.trackingId, "Tracking ID")}
-                    className="flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-5 py-3 text-xs font-bold text-white transition hover:bg-white/[0.06]"
-                  >
-                    <Copy className="h-4 w-4" />
-                    Copy Tracking ID
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setTrackingViewOpen(false)}
-                    className="flex items-center justify-center gap-2 rounded-xl bg-amber-400 px-5 py-3 text-xs font-bold text-black transition hover:bg-amber-300"
-                  >
-                    Done
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Tracking modal */}
+      {/* =====================================================
+          COMPACT DISPATCH & TRACKING SCREEN
+          Only this small responsive dialog is visible when opened.
+          ===================================================== */}
       {trackingModalOpen && (
         <div
-          className="fixed inset-0 z-[95] flex items-end justify-center bg-black/75 p-0 backdrop-blur-md sm:items-center sm:p-4"
+          className="fixed inset-0 z-[95] flex items-center justify-center bg-black/70 p-3 backdrop-blur-md sm:p-5"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="dispatch-tracking-title"
           onClick={() => !loading && setTrackingModalOpen(false)}
         >
           <div
-            className="w-full max-h-[92vh] overflow-y-auto rounded-t-3xl border border-white/10 bg-[#171717] shadow-2xl shadow-black/60 sm:max-w-md sm:rounded-2xl"
+            className="flex max-h-[min(92dvh,620px)] w-full max-w-[440px] flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#151515] shadow-[0_30px_100px_rgba(0,0,0,.65)] sm:rounded-3xl"
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
-              <div className="flex items-center gap-3">
-                <div className="rounded-xl bg-amber-400/10 p-2.5 text-amber-300">
+            {/* Compact header */}
+            <div className="flex items-center justify-between gap-3 border-b border-white/10 bg-[#171717] px-4 py-3.5 sm:px-5 sm:py-4">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-400/10 text-amber-300">
                   <Truck className="h-5 w-5" />
                 </div>
-                <div>
-                  <h2 className="text-sm font-bold text-white">Dispatch & Tracking</h2>
-                  <p className="mt-0.5 text-[10px] text-white/35">Add courier and tracking information</p>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h2 id="dispatch-tracking-title" className="truncate text-sm font-bold text-white sm:text-base">
+                      Dispatch & Tracking
+                    </h2>
+                    <span className="hidden rounded-full border border-amber-400/20 bg-amber-400/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-300 sm:inline">
+                      Compact
+                    </span>
+                  </div>
+                  <p className="mt-0.5 text-[10px] text-white/35">
+                    {order?.trackingId ? "Update shipment details" : "Add shipment details"}
+                  </p>
                 </div>
               </div>
+
               <button
                 type="button"
                 onClick={() => setTrackingModalOpen(false)}
                 disabled={loading}
-                className="rounded-lg p-2 text-white/40 hover:bg-white/5 hover:text-white"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] text-white/45 transition hover:bg-white/[0.07] hover:text-white disabled:opacity-40"
+                aria-label="Close dispatch and tracking"
               >
                 <XCircle className="h-5 w-5" />
               </button>
             </div>
 
-            <div className="space-y-4 p-5">
-              <label className="block">
-                <span className="mb-2 block text-xs font-semibold text-white/60">Courier partner</span>
-                <select
-                  value={courierInput}
-                  onChange={(event) => setCourierInput(event.target.value)}
-                  className="w-full rounded-xl border border-white/10 bg-[#0f0f0f] px-3 py-3 text-xs text-white outline-none transition focus:border-amber-400/40"
-                >
-                  <option value="">Select courier</option>
-                  <option value="Delhivery">Delhivery</option>
-                  <option value="DTDC">DTDC</option>
-                  <option value="Blue Dart">Blue Dart</option>
-                  <option value="India Post">India Post</option>
-                  <option value="Ekart">Ekart</option>
-                  <option value="Other">Other</option>
-                </select>
-              </label>
+            {/* Compact content */}
+            <div className="min-h-0 overflow-y-auto scrollbar-dark">
+              <div className="space-y-3.5 p-4 sm:p-5">
+                {/* Order mini summary */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="min-w-0 rounded-xl border border-white/10 bg-[#101010] px-3 py-2.5">
+                    <p className="text-[9px] uppercase tracking-[0.14em] text-white/30">Order</p>
+                    <p className="mt-1 truncate font-mono text-xs font-bold text-white">
+                      #{String(order?._id || "").slice(-8).toUpperCase()}
+                    </p>
+                  </div>
 
-              <label className="block">
-                <span className="mb-2 block text-xs font-semibold text-white/60">Tracking number</span>
-                <div className="relative">
-                  <input
-                    value={trackingInput}
-                    onChange={(event) => setTrackingInput(event.target.value)}
-                    placeholder="TRK123456789"
-                    className="w-full rounded-xl border border-white/10 bg-[#0f0f0f] px-3 py-3 pr-10 font-mono text-xs text-white outline-none placeholder:text-white/20 focus:border-amber-400/40"
-                  />
-                  <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/25" />
+                  <div className="min-w-0 rounded-xl border border-white/10 bg-[#101010] px-3 py-2.5">
+                    <p className="text-[9px] uppercase tracking-[0.14em] text-white/30">Status</p>
+                    <p className={`mt-1 truncate text-xs font-bold ${
+                      progress.tone === "green"
+                        ? "text-emerald-300"
+                        : progress.tone === "red"
+                        ? "text-red-300"
+                        : "text-amber-300"
+                    }`}>
+                      {progress.label}
+                    </p>
+                  </div>
                 </div>
-              </label>
 
-              <div className="flex gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={() => setTrackingModalOpen(false)}
-                  disabled={loading}
-                  className="flex-1 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-xs font-semibold text-white/65 hover:bg-white/[0.06]"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!trackingInput.trim()) {
-                      showNotification("error", "Enter a tracking number");
-                      return;
-                    }
-                    acceptOrReject(order._id, "tracking");
-                  }}
-                  disabled={loading}
-                  className="flex-1 rounded-xl bg-amber-400 px-4 py-3 text-xs font-bold text-black hover:bg-amber-300 disabled:opacity-60"
-                >
-                  {loading ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : "Save Tracking"}
-                </button>
+                {/* Courier */}
+                <label className="block">
+                  <span className="mb-1.5 flex items-center justify-between text-[11px] font-semibold text-white/60">
+                    <span>Courier partner</span>
+                    <span className="text-[9px] text-white/25">Required for shipment</span>
+                  </span>
+                  <div className="relative">
+                    <Truck className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-amber-300/50" />
+                    <select
+                      value={courierInput}
+                      onChange={(event) => setCourierInput(event.target.value)}
+                      className="h-11 w-full appearance-none rounded-xl border border-white/10 bg-[#0d0d0d] pl-9 pr-9 text-xs font-medium text-white outline-none transition focus:border-amber-400/40 focus:ring-2 focus:ring-amber-400/5"
+                    >
+                      <option value="">Select courier</option>
+                      <option value="DTDC">DTDC</option>
+                      <option value="India Post">India Post</option>
+                    </select>
+                    <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/25" />
+                  </div>
+                </label>
+
+                {/* Tracking ID */}
+                <label className="block">
+                  <span className="mb-1.5 flex items-center justify-between text-[11px] font-semibold text-white/60">
+                    <span>Tracking ID</span>
+                    <span className="text-[9px] text-white/25">Paste exact courier ID</span>
+                  </span>
+                  <div className="relative">
+                    <Hash className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-amber-300/50" />
+                    <input
+                      value={trackingInput}
+                      onChange={(event) => setTrackingInput(event.target.value)}
+                      placeholder="e.g. TRK123456789"
+                      autoComplete="off"
+                      spellCheck="false"
+                      className="h-11 w-full rounded-xl border border-white/10 bg-[#0d0d0d] pl-9 pr-10 font-mono text-xs font-semibold text-white outline-none transition placeholder:text-white/20 focus:border-amber-400/40 focus:ring-2 focus:ring-amber-400/5"
+                    />
+                    {trackingInput && (
+                      <button
+                        type="button"
+                        onClick={() => setTrackingInput("")}
+                        disabled={loading}
+                        className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-lg text-white/30 transition hover:bg-white/5 hover:text-white"
+                        aria-label="Clear tracking ID"
+                      >
+                        <XCircle className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                </label>
+
+                {/* Existing tracking preview */}
+                {order?.trackingId && (
+                  <div className="rounded-xl border border-emerald-400/15 bg-emerald-400/[0.05] p-3">
+                    <div className="flex items-start gap-2.5">
+                      <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300" />
+                      <div className="min-w-0">
+                        <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-emerald-300/70">
+                          Current tracking
+                        </p>
+                        <p className="mt-1 break-all font-mono text-xs font-bold text-white">
+                          {order.trackingId}
+                        </p>
+                        <p className="mt-1 text-[9px] text-white/30">
+                          Courier: {order?.courierPartner || order?.courier || "Not assigned"}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Actions */}
+                <div className="flex gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setTrackingModalOpen(false)}
+                    disabled={loading}
+                    className="min-h-11 flex-1 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-3 text-xs font-semibold text-white/60 transition hover:bg-white/[0.07] hover:text-white disabled:opacity-40"
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!courierInput.trim()) {
+                        showNotification("error", "Select a courier partner");
+                        return;
+                      }
+
+                      if (!trackingInput.trim()) {
+                        showNotification("error", "Enter a tracking ID");
+                        return;
+                      }
+
+                      acceptOrReject(order._id, "tracking");
+                    }}
+                    disabled={loading}
+                    className="min-h-11 flex-[1.35] rounded-xl bg-amber-400 px-3 py-3 text-xs font-black text-black shadow-lg shadow-amber-400/10 transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {loading ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Saving...
+                      </span>
+                    ) : (
+                      <span className="flex items-center justify-center gap-2">
+                        <CheckCircle className="h-4 w-4" />
+                        {order?.trackingId ? "Update Tracking" : "Save Tracking"}
+                      </span>
+                    )}
+                  </button>
+                </div>
+
+                <p className="px-1 text-center text-[9px] leading-4 text-white/25">
+                  This compact panel stays on the current Order Details screen. No full-page tracking screen will open.
+                </p>
               </div>
             </div>
           </div>

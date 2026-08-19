@@ -23,6 +23,7 @@ import {
   Truck,
   Users,
   XCircle,
+  ChevronRight,
 } from "lucide-react";
 import { Bar, Doughnut, Line } from "react-chartjs-2";
 import {
@@ -143,7 +144,7 @@ const AnimatedNumber = ({ value = 0, prefix = "", duration = 900 }) => {
 
 const Card = ({ children, className = "", hover = true }) => (
   <div
-    className={`relative overflow-hidden rounded-2xl border border-white/[0.08] bg-[#171717] ${
+    className={`relative w-full min-w-0 overflow-hidden rounded-2xl border border-white/[0.08] bg-[#171717] ${
       hover
         ? "transition-all duration-500 hover:-translate-y-0.5 hover:border-white/[0.13] hover:shadow-2xl"
         : ""
@@ -268,16 +269,24 @@ const Dashboard = () => {
     getProduct,
     fetchOrders,
     getUsers,
-    setTab
+    setTab,
+    url
   } = useAppContext();
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [exporting, setExporting] = useState(false);
-  const [range, setRange] = useState(30);
+  const [range, setRange] = useState(7);
+  const rangeLabel = (value) => {
+    if (value === "today") return "Today";
+    if (value === "yesterday") return "Yesterday";
+    if (value === "todayYesterday") return "Today + Yesterday";
+    return `${value} Days`;
+  };
   const [rangeOpen, setRangeOpen] = useState(false);
   // 🔽 Default to "paid" so only paid orders appear first
   const [orderTab, setOrderTab] = useState("paid");
+  const [dashboardPopup, setDashboardPopup] = useState(null);
 
   useEffect(() => {
     let mounted = true;
@@ -390,24 +399,72 @@ const Dashboard = () => {
     [paidOrders]
   );
 
-  const rangeStart = useMemo(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - range + 1);
-    d.setHours(0, 0, 0, 0);
-    return d;
+  const rangeConfig = useMemo(() => {
+    const now = new Date();
+    const todayStart = new Date(now);
+    todayStart.setHours(0, 0, 0, 0);
+
+    const tomorrowStart = new Date(todayStart);
+    tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+
+    const yesterdayStart = new Date(todayStart);
+    yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+
+    if (range === "today") {
+      return {
+        start: todayStart,
+        end: tomorrowStart,
+        days: 1,
+        label: "Today",
+      };
+    }
+
+    if (range === "yesterday") {
+      return {
+        start: yesterdayStart,
+        end: todayStart,
+        days: 1,
+        label: "Yesterday",
+      };
+    }
+
+    if (range === "todayYesterday") {
+      return {
+        start: yesterdayStart,
+        end: tomorrowStart,
+        days: 2,
+        label: "Today + Yesterday",
+      };
+    }
+
+    const days = Number(range) || 7;
+    const start = new Date(todayStart);
+    start.setDate(start.getDate() - days + 1);
+
+    return {
+      start,
+      end: tomorrowStart,
+      days,
+      label: `${days} Days`,
+    };
   }, [range]);
 
   const previousPeriod = useMemo(() => {
-    const end = new Date(rangeStart);
-    const start = new Date(rangeStart);
-    end.setDate(end.getDate() + range);
-    start.setDate(start.getDate() - range);
+    const duration = rangeConfig.days;
+    const end = new Date(rangeConfig.start);
+    const start = new Date(rangeConfig.start);
+    start.setDate(start.getDate() - duration);
     return { start, end };
-  }, [rangeStart, range]);
+  }, [rangeConfig]);
 
   const rangeOrders = useMemo(
-    () => paidOrders.filter((o) => o.orderDate >= rangeStart),
-    [paidOrders, rangeStart]
+    () =>
+      paidOrders.filter(
+        (o) =>
+          o.orderDate >= rangeConfig.start &&
+          o.orderDate < rangeConfig.end
+      ),
+    [paidOrders, rangeConfig]
   );
 
   const rangeRevenue = useMemo(
@@ -465,35 +522,67 @@ const Dashboard = () => {
   const todayRevenue = useMemo(() => {
     const start = new Date();
     start.setHours(0, 0, 0, 0);
-    const end = new Date();
-    end.setHours(23, 59, 59, 999);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 1);
 
     return paidOrders
-      .filter((o) => o.orderDate >= start && o.orderDate <= end)
-      .reduce(
-        (sum, order) => sum + (Number(order?.amount) || 0),
-        0
-      );
+      .filter((o) => o.orderDate >= start && o.orderDate < end)
+      .reduce((sum, order) => sum + (Number(order?.amount) || 0), 0);
+  }, [paidOrders]);
+
+  const yesterdayRevenue = useMemo(() => {
+    const end = new Date();
+    end.setHours(0, 0, 0, 0);
+    const start = new Date(end);
+    start.setDate(start.getDate() - 1);
+
+    return paidOrders
+      .filter((o) => o.orderDate >= start && o.orderDate < end)
+      .reduce((sum, order) => sum + (Number(order?.amount) || 0), 0);
   }, [paidOrders]);
 
   const todayOrders = useMemo(() => {
     const start = new Date();
     start.setHours(0, 0, 0, 0);
-    const end = new Date();
-    end.setHours(23, 59, 59, 999);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 1);
 
     return paidOrders.filter(
-      (o) => o.orderDate >= start && o.orderDate <= end
+      (o) => o.orderDate >= start && o.orderDate < end
     ).length;
+  }, [paidOrders]);
+
+  const yesterdayOrders = useMemo(() => {
+    const end = new Date();
+    end.setHours(0, 0, 0, 0);
+    const start = new Date(end);
+    start.setDate(start.getDate() - 1);
+
+    return paidOrders.filter(
+      (o) => o.orderDate >= start && o.orderDate < end
+    ).length;
+  }, [paidOrders]);
+
+  const sevenDayRevenue = useMemo(() => {
+    const end = new Date();
+    end.setHours(0, 0, 0, 0);
+    end.setDate(end.getDate() + 1);
+    const start = new Date(end);
+    start.setDate(start.getDate() - 7);
+
+    return paidOrders
+      .filter((o) => o.orderDate >= start && o.orderDate < end)
+      .reduce((sum, order) => sum + (Number(order?.amount) || 0), 0);
   }, [paidOrders]);
 
   const revenueChart = useMemo(() => {
     const labels = [];
     const values = [];
+    const days = rangeConfig.days;
 
-    for (let i = range - 1; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date(rangeConfig.end);
+      d.setDate(d.getDate() - 1 - i);
       d.setHours(0, 0, 0, 0);
 
       const next = new Date(d);
@@ -516,7 +605,7 @@ const Dashboard = () => {
     }
 
     return { labels, values };
-  }, [paidOrders, range]);
+  }, [paidOrders, rangeConfig]);
 
   const revenueData = {
     labels: revenueChart.labels,
@@ -557,14 +646,13 @@ const Dashboard = () => {
         ticks: {
           color: "#6f6f6f",
           font: { size: 10 },
-          maxTicksLimit: range === 30 ? 7 : 10,
+          maxTicksLimit: rangeConfig.days > 30 ? 8 : rangeConfig.days > 14 ? 10 : rangeConfig.days,
+          autoSkip: true,
         },
       },
       y: {
         beginAtZero: true,
-        grid: {
-          color: "rgba(255,255,255,.055)",
-        },
+        grid: { color: "rgba(255,255,255,.055)" },
         border: { display: false },
         ticks: {
           color: "#6f6f6f",
@@ -670,17 +758,41 @@ const Dashboard = () => {
 
   const orderBarOptions = {
     ...chartBase,
+    interaction: { intersect: true, mode: "nearest" },
+    onClick: (_event, elements) => {
+      if (!elements?.length) return;
+      const index = elements[0].index;
+      const daysAgo = 13 - index;
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - daysAgo);
+      startDate.setHours(0, 0, 0, 0);
+      const endDate = new Date(startDate);
+      endDate.setDate(endDate.getDate() + 1);
+      const dayOrders = paidOrders
+        .filter((o) => o.orderDate >= startDate && o.orderDate < endDate)
+        .sort((a, b) => b.orderDate - a.orderDate);
+      setDashboardPopup({ type: "orders-day", date: startDate, orders: dayOrders });
+    },
     scales: {
       x: {
         grid: { display: false },
         border: { display: false },
-        ticks: { color: "#707070", font: { size: 10 } },
+        ticks: { color: "#707070", font: { size: 10 }, maxTicksLimit: 7 },
       },
       y: {
         beginAtZero: true,
         grid: { color: "rgba(255,255,255,.05)" },
         border: { display: false },
         ticks: { color: "#707070", precision: 0 },
+      },
+    },
+    plugins: {
+      ...chartBase.plugins,
+      tooltip: {
+        ...chartBase.plugins.tooltip,
+        callbacks: {
+          label: (ctx) => `${ctx.raw || 0} paid order${Number(ctx.raw) === 1 ? "" : "s"} · Click to view`,
+        },
       },
     },
   };
@@ -736,11 +848,37 @@ const Dashboard = () => {
 
   const uploadChartOptions = {
     ...orderBarOptions,
+    onClick: (_event, elements) => {
+      if (!elements?.length) return;
+      const index = elements[0].index;
+      const daysAgo = 13 - index;
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - daysAgo);
+      startDate.setHours(0, 0, 0, 0);
+      const endDate = new Date(startDate);
+      endDate.setDate(endDate.getDate() + 1);
+      const products = (Array.isArray(allProduct) ? allProduct : [])
+        .filter((product) => {
+          const created = new Date(product?.createdAt || product?.createdDate || product?.date || 0);
+          return created >= startDate && created < endDate;
+        })
+        .sort((a, b) => new Date(b.createdAt || b.createdDate || b.date || 0) - new Date(a.createdAt || a.createdDate || a.date || 0));
+      setDashboardPopup({ type: "uploads-day", date: startDate, products });
+    },
     scales: {
       ...orderBarOptions.scales,
       y: {
         ...orderBarOptions.scales.y,
         ticks: { color: "#707070", precision: 0 },
+      },
+    },
+    plugins: {
+      ...orderBarOptions.plugins,
+      tooltip: {
+        ...orderBarOptions.plugins.tooltip,
+        callbacks: {
+          label: (ctx) => `${ctx.raw || 0} product upload${Number(ctx.raw) === 1 ? "" : "s"} · Click to view`,
+        },
       },
     },
   };
@@ -774,7 +912,7 @@ const Dashboard = () => {
         return {
           id,
           revenue,
-          name: product?.name || "Unknown Product",
+          name: product?.productName || product?.name || product?.title || "Unknown Product",
           image:
             product?.image ||
             product?.images?.[0] ||
@@ -849,6 +987,48 @@ const Dashboard = () => {
     pendingOrders,
     failedOrders,
   ]);
+
+  const getOrderCustomerName = useCallback((order) =>
+    order?.userShipping?.FullName ||
+    order?.userShipping?.fullName ||
+    order?.customerName ||
+    order?.user?.name ||
+    order?.userId ||
+    "Guest customer", []);
+
+  const getOrderItems = useCallback((order) => {
+    const source = Array.isArray(order?.products)
+      ? order.products
+      : Array.isArray(order?.orderItems)
+      ? order.orderItems
+      : [];
+    return source.map((item) => ({
+      id: productIdOf(item),
+      name: item?.productName || item?.name || item?.title || item?.product?.productName || "Unnamed product",
+      qty: quantityOf(item),
+      price: priceOf(item),
+    }));
+  }, []);
+
+  const openStockProduct = useCallback((product) => {
+    const productId = product?._id || product?.id;
+    if (!productId) return;
+    try {
+      localStorage.setItem("darsh:dashboard-stock-product", JSON.stringify({ id: productId }));
+    } catch (error) {
+      console.warn("Could not save stock product", error);
+    }
+    window.dispatchEvent(new CustomEvent("darsh:open-stock-product", { detail: { productId } }));
+    setTab(2);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [setTab]);
+
+  const openBestSeller = useCallback((product) => {
+    const matching = paidOrders.filter((order) =>
+      getOrderItems(order).some((item) => String(item.id || "") === String(product.id || ""))
+    ).sort((a, b) => b.orderDate - a.orderDate);
+    setDashboardPopup({ type: "best-seller", product, orders: matching });
+  }, [getOrderItems, paidOrders]);
 
   const goToOrders = useCallback(() => {
        setTab(3);
@@ -947,7 +1127,7 @@ const Dashboard = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#0b0b0b] px-4 py-5 text-white sm:px-6 lg:px-8">
+    <div className="dashboard-touch min-h-screen overflow-x-hidden bg-[#0b0b0b] px-3 py-4 text-white sm:px-6 sm:py-5 lg:px-8">
       <style>{`
         @keyframes fadeUp {
           from { opacity: 0; transform: translateY(14px); }
@@ -960,6 +1140,12 @@ const Dashboard = () => {
         .dashboard-scroll::-webkit-scrollbar { width: 5px; height: 5px; }
         .dashboard-scroll::-webkit-scrollbar-track { background: transparent; }
         .dashboard-scroll::-webkit-scrollbar-thumb { background: #303030; border-radius: 999px; }
+        .dashboard-scroll { scrollbar-width: thin; -webkit-overflow-scrolling: touch; }
+        .dashboard-touch { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+        .dashboard-safe-bottom { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
+        @media (max-width: 639px) {
+          .dashboard-chart-label { font-size: 9px !important; }
+        }
       `}</style>
 
       <div className="mx-auto max-w-[1600px]">
@@ -1043,7 +1229,7 @@ const Dashboard = () => {
         {/* KPI */}
         <section className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard
-            title={`Revenue (${range}D)`}
+            title={`Revenue · ${rangeConfig.label}`}
             value={rangeRevenue}
             currencyValue
             icon={IndianRupee}
@@ -1052,7 +1238,7 @@ const Dashboard = () => {
             delay={50}
           />
           <StatCard
-            title={`Orders (${range}D)`}
+            title={`Orders · ${rangeConfig.label}`}
             value={rangeOrders.length}
             icon={ShoppingBag}
             growth={orderGrowth}
@@ -1065,7 +1251,7 @@ const Dashboard = () => {
             currencyValue
             icon={TrendingUp}
             accent="blue"
-            subtitle={`last ${range} days`}
+            subtitle={rangeConfig.label}
             delay={150}
           />
           <StatCard
@@ -1077,42 +1263,85 @@ const Dashboard = () => {
           />
         </section>
 
-        {/* Today mini stats */}
-        <section className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {/* Revenue quick range cards */}
+        <section className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {[
-            [
-              "Today revenue",
-              currency(todayRevenue),
-              IndianRupee,
-              "text-amber-400",
-            ],
-            ["Today orders", todayOrders, ShoppingBag, "text-blue-400"],
-            [
-              "Success rate",
-              `${paymentSuccessRate.toFixed(1)}%`,
-              CheckCircle2,
-              "text-emerald-400",
-            ],
-            ["Total users", totalUsers, Users, "text-purple-400"],
-          ].map(([label, value, Icon, color]) => (
-            <div
-              key={label}
-              className="group rounded-xl border border-white/[0.06] bg-[#121212] px-4 py-3.5 transition hover:border-white/[0.12] hover:bg-[#151515]"
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-[10px] uppercase tracking-[0.12em] text-[#686868]">
-                    {label}
-                  </p>
-                  <p className={`mt-1 text-base font-bold ${color}`}>{value}</p>
+            {
+              label: "Today",
+              value: currency(todayRevenue),
+              meta: `${todayOrders} paid order${todayOrders === 1 ? "" : "s"}`,
+              icon: IndianRupee,
+              color: "text-amber-400",
+              valueKey: "today",
+            },
+            {
+              label: "Yesterday",
+              value: currency(yesterdayRevenue),
+              meta: `${yesterdayOrders} paid order${yesterdayOrders === 1 ? "" : "s"}`,
+              icon: Clock3,
+              color: "text-blue-400",
+              valueKey: "yesterday",
+            },
+            {
+              label: "Last 7 days",
+              value: currency(sevenDayRevenue),
+              meta: "Default revenue range",
+              icon: CalendarDays,
+              color: "text-emerald-400",
+              valueKey: 7,
+            },
+            {
+              label: "Payment success",
+              value: `${paymentSuccessRate.toFixed(1)}%`,
+              meta: `${paidOrders.length} of ${allOrders.length} orders paid`,
+              icon: CheckCircle2,
+              color: "text-purple-400",
+              valueKey: null,
+            },
+          ].map(({ label, value, meta, icon: Icon, color, valueKey }) => {
+            const active = valueKey !== null && range === valueKey;
+
+            return (
+              <button
+                key={label}
+                type="button"
+                disabled={valueKey === null}
+                onClick={() => {
+                  if (valueKey !== null) {
+                    setRange(valueKey);
+                    setRangeOpen(false);
+                  }
+                }}
+                className={`group rounded-2xl border px-4 py-4 text-left transition-all duration-300 ${
+                  active
+                    ? "border-amber-500/30 bg-amber-500/[0.07] shadow-[0_10px_35px_rgba(245,169,11,.06)]"
+                    : "border-white/[0.06] bg-[#121212] hover:-translate-y-0.5 hover:border-white/[0.12] hover:bg-[#151515]"
+                } ${valueKey === null ? "cursor-default" : "cursor-pointer"}`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.13em] text-[#777]">
+                        {label}
+                      </p>
+                      {active && (
+                        <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[9px] font-semibold text-amber-400">
+                          Selected
+                        </span>
+                      )}
+                    </div>
+                    <p className={`mt-2 truncate text-xl font-bold sm:text-2xl ${color}`}>
+                      {value}
+                    </p>
+                    <p className="mt-1 text-[11px] text-[#6f6f6f]">{meta}</p>
+                  </div>
+                  <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/[0.07] bg-white/[0.025] ${color}`}>
+                    <Icon size={18} />
+                  </div>
                 </div>
-                <Icon
-                  size={18}
-                  className={`${color} opacity-70 transition group-hover:scale-110`}
-                />
-              </div>
-            </div>
-          ))}
+              </button>
+            );
+          })}
         </section>
 
         {/* Main charts */}
@@ -1127,11 +1356,11 @@ const Dashboard = () => {
                   <TrendingUp size={17} className="text-amber-400" />
                 </div>
                 <p className="mt-1 text-xs text-[#777]">
-                  Daily GST-inclusive sales, last {range} days
+                  Daily GST-inclusive sales · {rangeConfig.label}
                 </p>
               </div>
 
-              <div className="flex items-center gap-4">
+              <div className="flex w-full flex-wrap items-center justify-between gap-3 sm:w-auto sm:justify-end">
                 <div className="relative">
                   <button
                     type="button"
@@ -1139,15 +1368,15 @@ const Dashboard = () => {
                     className="flex items-center gap-2 rounded-lg border border-white/[0.08] bg-[#111] px-3 py-2 text-xs text-[#a1a1a1] transition hover:border-amber-500/20 hover:text-white"
                   >
                     <CalendarDays size={14} />
-                    {range} Days
+                    {rangeLabel(range)}
                     <ChevronDown size={13} />
                   </button>
 
                   {rangeOpen && (
-                    <div className="absolute right-0 top-full z-30 mt-2 w-32 overflow-hidden rounded-xl border border-white/[0.08] bg-[#1b1b1b] p-1 shadow-2xl">
-                      {[7, 30, 90].map((item) => (
+                    <div className="absolute  top-full z-30 mt-2 w-44 overflow-hidden rounded-xl border border-white/[0.08] bg-[#1b1b1b] p-1 shadow-2xl">
+                      {["todayYesterday", 7, 14, 30, 90].map((item) => (
                         <button
-                          key={item}
+                          key={String(item)}
                           type="button"
                           onClick={() => {
                             setRange(item);
@@ -1159,7 +1388,7 @@ const Dashboard = () => {
                               : "text-[#999] hover:bg-white/[0.05] hover:text-white"
                           }`}
                         >
-                          {item} Days
+                          {rangeLabel(item)}
                         </button>
                       ))}
                     </div>
@@ -1262,10 +1491,10 @@ const Dashboard = () => {
             <div className="mb-5">
               <h2 className="text-lg font-bold">Daily product uploads</h2>
               <p className="mt-1 text-xs text-[#707070]">
-                Catalogue activity, last 14 days
+                Catalogue activity, last 14 days · <span className="text-emerald-400/80">click a bar to view products</span>
               </p>
             </div>
-            <div className="h-[290px]">
+            <div className="h-[250px] sm:h-[290px]">
               <Bar data={uploadChartData} options={uploadChartOptions} />
             </div>
           </Card>
@@ -1274,10 +1503,10 @@ const Dashboard = () => {
             <div className="mb-5">
               <h2 className="text-lg font-bold">Orders per day</h2>
               <p className="mt-1 text-xs text-[#707070]">
-                Paid order volume, last 14 days
+                Paid order volume, last 14 days · <span className="text-blue-400/80">click a bar to view orders</span>
               </p>
             </div>
-            <div className="h-[290px]">
+            <div className="h-[250px] sm:h-[290px]">
               <Bar data={orderBarData} options={orderBarOptions} />
             </div>
           </Card>
@@ -1294,9 +1523,11 @@ const Dashboard = () => {
             <div className="space-y-4">
               {topProducts.length ? (
                 topProducts.slice(0, 6).map((product, index) => (
-                  <div
+                  <button
                     key={product.id}
-                    className="group flex items-center gap-3"
+                    type="button"
+                    onClick={() => openBestSeller(product)}
+                    className="group flex w-full items-center gap-3 rounded-xl px-2 py-1.5 text-left transition hover:bg-white/[0.035]"
                   >
                     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-xs font-bold text-amber-400">
                       {index + 1}
@@ -1339,7 +1570,8 @@ const Dashboard = () => {
                     <span className="shrink-0 text-xs font-semibold text-white">
                       {compactCurrency(product.revenue)}
                     </span>
-                  </div>
+                    <ChevronRight size={14} className="shrink-0 text-[#4f4f4f] transition group-hover:text-amber-400" />
+                  </button>
                 ))
               ) : (
                 <div className="flex h-64 items-center justify-center text-sm text-[#666]">
@@ -1396,96 +1628,93 @@ const Dashboard = () => {
               ))}
             </div>
 
-            <div className="dashboard-scroll overflow-x-auto">
-              <div className="min-w-[650px]">
-                <div className="grid grid-cols-[1.6fr_1fr_1fr_.8fr] gap-4 border-b border-white/[0.06] px-5 py-3 text-[10px] uppercase tracking-[.12em] text-[#5f5f5f] sm:px-6">
-                  <span>Order</span>
-                  <span>Date</span>
-                  <span>Amount</span>
-                  <span>Status</span>
+            {/* Desktop order table */}
+            <div className="dashboard-scroll hidden overflow-x-auto sm:block">
+              <div className="min-w-[760px]">
+                <div className="grid grid-cols-[1.35fr_1.5fr_1fr_.75fr_.7fr] gap-4 border-b border-white/[0.06] px-5 py-3 text-[10px] uppercase tracking-[.12em] text-[#5f5f5f] sm:px-6">
+                  <span>Customer / Order</span><span>Items</span><span>Date</span><span>Amount</span><span>Status</span>
                 </div>
-
                 <div className="divide-y divide-white/[0.05]">
-                  {recentOrders.length ? (
-                    recentOrders.map((order, index) => {
-                      const paid =
-                        order.normalizedStatus === "paid" ||
-                        order.normalizedStatus === "payment successful";
-                      const failed =
-                        order.normalizedStatus === "failed" ||
-                        order.normalizedStatus === "cancelled";
-
-                      return (
-                        <div
-                          key={order?._id || order?.id || index}
-                          className="grid grid-cols-[1.6fr_1fr_1fr_.8fr] items-center gap-4 px-5 py-4 transition hover:bg-white/[0.025] sm:px-6"
-                        >
-                          <div className="flex min-w-0 items-center gap-3">
-                            <div
-                              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
-                                paid
-                                  ? "bg-emerald-500/10 text-emerald-400"
-                                  : failed
-                                    ? "bg-rose-500/10 text-rose-400"
-                                    : "bg-amber-500/10 text-amber-400"
-                              }`}
-                            >
-                              {paid ? (
-                                <CheckCircle2 size={17} />
-                              ) : failed ? (
-                                <XCircle size={17} />
-                              ) : (
-                                <Clock3 size={17} />
-                              )}
-                            </div>
-
-                            <div className="min-w-0">
-                              <p className="truncate text-sm font-medium text-white">
-                                Order #
-                                {String(order?._id || order?.id || "N/A").slice(
-                                  0,
-                                  10,
-                                )}
-                              </p>
-                              <p className="mt-0.5 text-[10px] text-[#656565]">
-                                {order.itemCount} items
-                              </p>
-                            </div>
-                          </div>
-
-                          <span className="text-xs text-[#777]">
-                            {order.orderDate.toLocaleDateString("en-IN", {
-                              day: "2-digit",
-                              month: "short",
-                            })}
-                          </span>
-
-                          <span className="text-sm font-semibold text-white">
-                            {currency(order?.amount)}
-                          </span>
-
-                          <span
-                            className={`inline-flex w-fit rounded-full px-2.5 py-1 text-[10px] font-semibold ${
-                              paid
-                                ? "bg-emerald-500/10 text-emerald-400"
-                                : failed
-                                  ? "bg-rose-500/10 text-rose-400"
-                                  : "bg-amber-500/10 text-amber-400"
-                            }`}
-                          >
-                            {paid ? "Paid" : failed ? "Failed" : "Pending"}
-                          </span>
+                  {recentOrders.length ? recentOrders.map((order, index) => {
+                    const paid = order.normalizedStatus === "paid" || order.normalizedStatus === "payment successful";
+                    const failed = order.normalizedStatus === "failed" || order.normalizedStatus === "cancelled";
+                    const items = getOrderItems(order);
+                    const customer = getOrderCustomerName(order);
+                    return (
+                      <button
+                        key={order?._id || order?.id || index}
+                        type="button"
+                        onClick={() => setDashboardPopup({ type: "order", order })}
+                        className="grid w-full grid-cols-[1.35fr_1.5fr_1fr_.75fr_.7fr] items-center gap-4 px-5 py-4 text-left transition hover:bg-white/[0.035] sm:px-6"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-white">{customer}</p>
+                          <p className="mt-0.5 truncate text-[10px] text-[#656565]">Order #{String(order?._id || order?.id || "N/A").slice(0, 10)}</p>
                         </div>
-                      );
-                    })
-                  ) : (
-                    <div className="py-14 text-center text-sm text-[#666]">
-                      No orders found
-                    </div>
-                  )}
+                        <div className="min-w-0">
+                          <p className="truncate text-xs text-[#d8d8d8]">{items.slice(0,2).map((item) => `${item.name} ×${item.qty}`).join(" · ") || "No items"}</p>
+                          <p className="mt-1 text-[10px] text-[#5f5f5f]">{order.itemCount} {order.itemCount === 1 ? "item" : "items"}</p>
+                        </div>
+                        <span className="text-xs text-[#777]">{order.orderDate.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</span>
+                        <span className="text-sm font-semibold text-white">{currency(order?.amount)}</span>
+                        <span className={`inline-flex w-fit rounded-full px-2.5 py-1 text-[10px] font-semibold ${paid ? "bg-emerald-500/10 text-emerald-400" : failed ? "bg-rose-500/10 text-rose-400" : "bg-amber-500/10 text-amber-400"}`}>
+                          {paid ? "Paid" : failed ? "Failed" : "Pending"}
+                        </span>
+                      </button>
+                    );
+                  }) : <div className="py-14 text-center text-sm text-[#666]">No orders found</div>}
                 </div>
               </div>
             </div>
+
+            {/* Mobile order cards */}
+            <div className="space-y-2 p-3 sm:hidden">
+              {recentOrders.length ? recentOrders.map((order, index) => {
+                const paid = order.normalizedStatus === "paid" || order.normalizedStatus === "payment successful";
+                const failed = order.normalizedStatus === "failed" || order.normalizedStatus === "cancelled";
+                const items = getOrderItems(order);
+                const customer = getOrderCustomerName(order);
+                return (
+                  <button
+                    key={order?._id || order?.id || index}
+                    type="button"
+                    onClick={() => setDashboardPopup({ type: "order", order })}
+                    className="group w-full rounded-2xl border border-white/[0.06] bg-[#121212] p-3.5 text-left transition active:scale-[0.99] hover:border-white/[0.12] hover:bg-[#151515]"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold text-white">{customer}</p>
+                        <p className="mt-1 truncate text-[10px] text-[#626262]">
+                          #{String(order?._id || order?.id || "N/A").slice(0, 14)}
+                        </p>
+                      </div>
+                      <span className={`shrink-0 rounded-full px-2.5 py-1 text-[9px] font-bold ${
+                        paid ? "bg-emerald-500/10 text-emerald-400" :
+                        failed ? "bg-rose-500/10 text-rose-400" :
+                        "bg-amber-500/10 text-amber-400"
+                      }`}>
+                        {paid ? "Paid" : failed ? "Failed" : "Pending"}
+                      </span>
+                    </div>
+                    <div className="mt-3 flex items-end justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[11px] text-[#b5b5b5]">
+                          {items.slice(0, 2).map((item) => `${item.name} ×${item.qty}`).join(" · ") || "No items"}
+                        </p>
+                        <p className="mt-1 text-[10px] text-[#5e5e5e]">
+                          {order.itemCount} {order.itemCount === 1 ? "item" : "items"} · {order.orderDate.toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <span className="text-sm font-bold text-white">{currency(order?.amount)}</span>
+                        <ChevronRight size={14} className="text-[#4f4f4f] transition group-hover:text-amber-400" />
+                      </div>
+                    </div>
+                  </button>
+                );
+              }) : <div className="py-12 text-center text-sm text-[#666]">No orders found</div>}
+            </div>
+
           </Card>
 
           {/* 🔽 Enhanced Stock Alerts Card with Refresh Button & Timestamps */}
@@ -1525,9 +1754,11 @@ const Dashboard = () => {
             <div className="space-y-1">
               {stockAlerts.length ? (
                 stockAlerts.map((product) => (
-                  <div
+                  <button
                     key={product?._id || product?.id || product?.productName}
-                    className="flex items-center justify-between rounded-xl px-3 py-3 transition hover:bg-white/[0.035]"
+                    type="button"
+                    onClick={() => openStockProduct(product)}
+                    className="group flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition active:scale-[0.99] hover:bg-white/[0.035]"
                   >
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium text-white">
@@ -1557,7 +1788,8 @@ const Dashboard = () => {
                         ? "Out"
                         : `${product.stockValue} left`}
                     </span>
-                  </div>
+                    <ChevronRight size={14} className="ml-2 shrink-0 text-[#4f4f4f] transition group-hover:text-amber-400" />
+                  </button>
                 ))
               ) : (
                 <div className="flex min-h-[260px] flex-col items-center justify-center text-center">
@@ -1749,6 +1981,80 @@ const Dashboard = () => {
               </button>
             </div>
           </Card>
+        </section>
+
+        {dashboardPopup && (
+          <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/75 p-0 backdrop-blur-md sm:items-center sm:p-4 md:p-6" onClick={() => setDashboardPopup(null)}>
+            <div className="dashboard-safe-bottom flex max-h-[94dvh] w-full max-w-3xl flex-col overflow-hidden rounded-t-[1.75rem] border border-white/10 bg-[#151515] shadow-[0_24px_90px_rgba(0,0,0,.55)] sm:max-h-[90dvh] sm:rounded-3xl" onClick={(event) => event.stopPropagation()}>
+              <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/[0.07] px-4 py-3.5 sm:px-6 sm:py-4">
+                <div className="min-w-0">
+                  <p className="text-[10px] uppercase tracking-[.14em] text-[#666]">
+                    {dashboardPopup.type === "uploads-day" ? "Daily product uploads" : dashboardPopup.type === "orders-day" ? "Orders per day" : dashboardPopup.type === "best-seller" ? "Best seller orders" : "Order details"}
+                  </p>
+                  <h3 className="mt-1 truncate text-base font-bold text-white sm:text-lg">
+                    {dashboardPopup.type === "uploads-day" || dashboardPopup.type === "orders-day"
+                      ? dashboardPopup.date?.toLocaleDateString("en-IN", { weekday: "long", day: "2-digit", month: "long", year: "numeric" })
+                      : dashboardPopup.type === "best-seller"
+                      ? dashboardPopup.product?.name
+                      : getOrderCustomerName(dashboardPopup.order)}
+                  </h3>
+                </div>
+                <button type="button" onClick={() => setDashboardPopup(null)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-[#888] hover:text-white"><XCircle size={18}/></button>
+              </div>
+              <div className="dashboard-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 pb-4 sm:p-5">
+                {dashboardPopup.type === "uploads-day" ? (
+                  dashboardPopup.products?.length ? (
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      {dashboardPopup.products.map((product) => (
+                        <button key={product?._id || product?.id} type="button" onClick={() => { setDashboardPopup(null); openStockProduct({ ...product, stock: product.stock }); }} className="flex items-center gap-3 rounded-2xl border border-white/[0.06] bg-[#111] p-3 text-left hover:border-emerald-500/20">
+                          <div className="h-14 w-12 shrink-0 overflow-hidden rounded-xl bg-white/[0.04]">
+                            {product?.images?.[0] ? (
+                              <img src={String(product.images[0]).startsWith("http") ? product.images[0] : `${url}/img/${product.images[0]}`} alt={product?.productName || "Product"} className="h-full w-full object-cover" />
+                            ) : (
+                              <Package className="mx-auto mt-4 h-5 w-5 text-[#555]" />
+                            )}
+                          </div>
+                          <div className="min-w-0"><p className="truncate text-sm font-semibold text-white">{product?.productName || product?.name || "Untitled product"}</p><p className="mt-1 text-[10px] text-[#666]">{product?.category || "Uncategorized"} · Stock {getStock(product)}</p></div>
+                          <ChevronRight size={15} className="ml-auto shrink-0 text-[#555]" />
+                        </button>
+                      ))}
+                    </div>
+                  ) : <div className="flex min-h-[250px] items-center justify-center text-sm text-[#666]">No products uploaded on this day.</div>
+                ) : (
+                  <div className="space-y-2">
+                    {(dashboardPopup.type === "best-seller" ? dashboardPopup.orders : dashboardPopup.type === "orders-day" ? dashboardPopup.orders : [dashboardPopup.order]).filter(Boolean).map((order, index) => {
+                      const items = getOrderItems(order);
+                      return <div key={order?._id || order?.id || index} className="rounded-2xl border border-white/[0.06] bg-[#111] p-4">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between"><div><p className="text-sm font-semibold text-white">{getOrderCustomerName(order)}</p><p className="mt-1 text-[10px] text-[#666]">Order #{String(order?._id || order?.id || "N/A").slice(0,14)} · {order.orderDate.toLocaleString("en-IN", { day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit" })}</p></div><p className="text-sm font-bold text-amber-400">{currency(order.amount)}</p></div>
+                        <div className="mt-3 flex flex-wrap gap-2">{items.map((item, i) => <span key={`${item.id || item.name}-${i}`} className="rounded-lg border border-white/[0.06] bg-white/[0.03] px-2.5 py-1.5 text-[10px] text-[#aaa]">{item.name} ×{item.qty}</span>)}</div>
+                      </div>;
+                    })}
+                    {!(dashboardPopup.type === "best-seller" ? dashboardPopup.orders : dashboardPopup.orders || [dashboardPopup.order]).length && <div className="flex min-h-[250px] items-center justify-center text-sm text-[#666]">No matching orders found.</div>}
+                  </div>
+                )}
+              </div>
+              <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-white/[0.07] bg-[#121212] px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6"><span className="text-[10px] text-[#666]">Tap outside or close to dismiss</span><button type="button" onClick={() => { setDashboardPopup(null); goToOrders(); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="inline-flex items-center gap-1.5 rounded-xl bg-amber-500 px-3 py-2 text-[10px] font-bold text-black hover:bg-amber-400">Open Orders <ChevronRight size={13}/></button></div>
+            </div>
+          </div>
+        )}
+
+        {/* Responsive dashboard insights */}
+        <section className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="rounded-2xl border border-amber-500/10 bg-gradient-to-br from-amber-500/[0.07] to-transparent p-4">
+            <p className="text-[10px] font-semibold uppercase tracking-[.14em] text-amber-400">Revenue focus</p>
+            <p className="mt-2 text-sm font-semibold text-white">7-day view is your default snapshot.</p>
+            <p className="mt-1 text-[10px] leading-5 text-[#707070]">Use Today or Yesterday for quick daily checks.</p>
+          </div>
+          <div className="rounded-2xl border border-blue-500/10 bg-gradient-to-br from-blue-500/[0.06] to-transparent p-4">
+            <p className="text-[10px] font-semibold uppercase tracking-[.14em] text-blue-400">Drill down</p>
+            <p className="mt-2 text-sm font-semibold text-white">Charts and orders are interactive.</p>
+            <p className="mt-1 text-[10px] leading-5 text-[#707070]">Tap a bar, order, best seller, or alert to see more.</p>
+          </div>
+          <div className="rounded-2xl border border-emerald-500/10 bg-gradient-to-br from-emerald-500/[0.06] to-transparent p-4">
+            <p className="text-[10px] font-semibold uppercase tracking-[.14em] text-emerald-400">Inventory</p>
+            <p className="mt-2 text-sm font-semibold text-white">Low-stock items stay one tap away.</p>
+            <p className="mt-1 text-[10px] leading-5 text-[#707070]">Open a stock alert to jump to that exact product.</p>
+          </div>
         </section>
 
         <footer className="mt-6 flex flex-col gap-3 border-t border-white/[0.06] py-5 text-xs text-[#5f5f5f] sm:flex-row sm:items-center sm:justify-between">
