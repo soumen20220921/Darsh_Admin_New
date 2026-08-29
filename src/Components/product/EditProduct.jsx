@@ -171,11 +171,19 @@ const EditProduct = ({
   ======================================================= */
 
   const categories = [
-    "Pujo Special",
+   "Pujo Special",
+    "Designer Saree",
+    "Handstitch",
+    "Royal Bengal Tussar",
+    "Tussar kantha",
+    "Bengal Tussar",
+    "Pure Silk",
+    "Pure Handloom",
+    "Silk Replica",
+    "Pure Dhonekhali",
     "Banarasi",
     "Kanthastitch",
     "Kanjivaram",
-    "Pure Silk",
     "Cotton Handloom",
     "Bandhani",
     "Festive Edit",
@@ -183,6 +191,13 @@ const EditProduct = ({
     "Pure Silk Replica",
     "Fancy Saree",
     "Handloom Saree",
+    "Dhonekhali",
+    "Run kantha",
+    "Bangalore Silk ",
+    "Bapta Batik",
+    "Dhakai",
+    "Chanderi Cotton",
+    "Khesh Kantha",
     "Other Saree",
   ];
 

@@ -171,10 +171,18 @@ const AddProduct = () => {
 
   const categories = [
     "Pujo Special",
+    "Designer Saree",
+    "Handstitch",
+    "Royal Bengal Tussar",
+    "Tussar kantha",
+    "Bengal Tussar",
+    "Pure Silk",
+    "Pure Handloom",
+    "Silk Replica",
+    "Pure Dhonekhali",
     "Banarasi",
     "Kanthastitch",
     "Kanjivaram",
-    "Pure Silk",
     "Cotton Handloom",
     "Bandhani",
     "Festive Edit",
@@ -182,6 +190,13 @@ const AddProduct = () => {
     "Pure Silk Replica",
     "Fancy Saree",
     "Handloom Saree",
+    "Dhonekhali",
+    "Run kantha",
+    "Bangalore Silk ",
+    "Bapta Batik",
+    "Dhakai",
+    "Chanderi Cotton",
+    "Khesh Kantha",
     "Other Saree",
   ];
 
