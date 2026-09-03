@@ -29,7 +29,7 @@ import {
   MessageCircle,
 } from "lucide-react";
 
-const API = "https://api.darshsaree.in/api/therapist";
+const API = "http://localhost:8001/api/therapist";
 
 const Therapist = () => {
   const [activeTab, setActiveTab] = useState("list");
@@ -1246,7 +1246,7 @@ const TherapistGridCard = ({ therapist, onEdit, onDelete, isSelected, onSelect, 
         <img
           src={
             therapist.image
-              ? `https://api.darshsaree.in/img/${therapist.image}`
+              ? `http://localhost:8001/img/${therapist.image}`
               : "https://images.unsplash.com/photo-1560250097-0b93528c311a?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1000&q=80"
           }
           alt={therapist.name}
@@ -1368,7 +1368,7 @@ const TherapistListCard = ({
             <img
               src={
                 therapist.image
-                  ? `https://api.darshsaree.in/img/${therapist.image._id}`
+                  ? `http://localhost:8001/img/${therapist.image._id}`
                   : "https://images.unsplash.com/photo-1560250097-0b93528c311a?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1000&q=80"
               }
               alt={therapist.name}

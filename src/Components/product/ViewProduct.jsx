@@ -1,5 +1,7 @@
+
 import {
   ArrowLeft,
+  CalendarClock,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
@@ -215,6 +217,21 @@ const ViewProduct = ({
   const isHotSell =
     product?.hotSell === true ||
     product?.hotSell === "true";
+
+  /* =========================================================
+     PRE-BOOKING
+     Backend field: preBooking
+     Supports boolean / string / numeric API values.
+  ========================================================= */
+
+  const isPreBooking =
+    product?.preBooking === true ||
+    product?.preBooking === "true" ||
+    product?.preBooking === 1 ||
+    product?.preBooking === "1" ||
+    String(product?.preBooking || "")
+      .trim()
+      .toLowerCase() === "yes";
 
   /* =========================================================
      BLOUSE
@@ -494,6 +511,13 @@ const blouseStatus = useMemo(() => {
                   <span className="vp-hot-badge">
                     <Flame size={12} />
                     Hot Sell
+                  </span>
+                )}
+
+                {isPreBooking && (
+                  <span className="vp-prebooking-badge">
+                    <CalendarClock size={12} />
+                    Pre-Booking
                   </span>
                 )}
 
@@ -1002,6 +1026,37 @@ const blouseStatus = useMemo(() => {
 
               </div>
 
+              {/* PRE-BOOKING */}
+
+              {isPreBooking && (
+                <div className="vp-prebooking-card">
+                  <div className="vp-prebooking-left">
+                    <div className="vp-prebooking-icon">
+                      <CalendarClock size={18} />
+                    </div>
+
+                    <div className="vp-prebooking-content">
+                      <div className="vp-prebooking-eyebrow">
+                        ADVANCE ORDER
+                      </div>
+
+                      <div className="vp-prebooking-title">
+                        Pre-booking is active
+                      </div>
+
+                      <div className="vp-prebooking-description">
+                        Customers can reserve this product before regular stock is available.
+                      </div>
+                    </div>
+                  </div>
+
+                  <span className="vp-prebooking-status">
+                    <span className="vp-prebooking-status-dot" />
+                    Accepting
+                  </span>
+                </div>
+              )}
+
               {/* STOCK */}
 
               <div className="vp-stock-card">
@@ -1034,6 +1089,9 @@ const blouseStatus = useMemo(() => {
                         ? "unit"
                         : "units"}{" "}
                       available
+                      {isPreBooking && stock <= 0
+                        ? " • Pre-booking open"
+                        : ""}
                     </p>
 
                   </div>
@@ -1042,7 +1100,9 @@ const blouseStatus = useMemo(() => {
 
                 <span
                   className={`vp-status ${
-                    !isInStock
+                    !isInStock && isPreBooking
+                      ? "prebook"
+                      : !isInStock
                       ? "out"
                       : isLowStock
                       ? "low"
@@ -1051,7 +1111,9 @@ const blouseStatus = useMemo(() => {
                 >
                   <span className="vp-status-dot" />
 
-                  {!isInStock
+                  {!isInStock && isPreBooking
+                    ? "Pre-Booking"
+                    : !isInStock
                     ? "Out of Stock"
                     : isLowStock
                     ? "Low Stock"
@@ -1453,6 +1515,129 @@ const styles = `
 
     animation:
       vpHotPulse 2.2s infinite;
+  }
+
+  /* =====================================================
+     PRE-BOOKING
+  ===================================================== */
+
+  .vp-prebooking-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 9px;
+    border: 1px solid #284b45;
+    border-radius: 999px;
+    background: #142522;
+    color: #5eead4;
+    font-size: 9px;
+    font-weight: 800;
+    box-shadow: 0 5px 15px rgba(45,212,191,.05);
+  }
+
+  .vp-prebooking-card {
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px;
+    border: 1px solid #284b45;
+    border-radius: 10px;
+    background:
+      linear-gradient(
+        135deg,
+        rgba(20, 45, 40, .92),
+        #181b1a
+      );
+    box-shadow:
+      inset 0 0 0 1px rgba(94,234,212,.015),
+      0 8px 24px rgba(0,0,0,.12);
+  }
+
+  .vp-prebooking-card::after {
+    content: "";
+    position: absolute;
+    width: 95px;
+    height: 95px;
+    right: -45px;
+    top: -50px;
+    border-radius: 50%;
+    background: rgba(94,234,212,.045);
+    pointer-events: none;
+  }
+
+  .vp-prebooking-left {
+    position: relative;
+    z-index: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .vp-prebooking-icon {
+    width: 38px;
+    height: 38px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #2f5e55;
+    border-radius: 9px;
+    background: #17312c;
+    color: #5eead4;
+  }
+
+  .vp-prebooking-content {
+    min-width: 0;
+  }
+
+  .vp-prebooking-eyebrow {
+    color: #5eead4;
+    font-size: 7px;
+    font-weight: 800;
+    letter-spacing: .55px;
+  }
+
+  .vp-prebooking-title {
+    margin-top: 2px;
+    color: #e7f9f5;
+    font-size: 11px;
+    font-weight: 800;
+  }
+
+  .vp-prebooking-description {
+    max-width: 370px;
+    margin-top: 3px;
+    color: #7fa39b;
+    font-size: 8px;
+    line-height: 1.55;
+  }
+
+  .vp-prebooking-status {
+    position: relative;
+    z-index: 1;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 8px;
+    border-radius: 999px;
+    background: #17312c;
+    color: #5eead4;
+    font-size: 8px;
+    font-weight: 750;
+  }
+
+  .vp-prebooking-status-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: currentColor;
+    box-shadow: 0 0 8px rgba(94,234,212,.55);
+    animation: vpPrebookPulse 1.8s infinite;
   }
 
   .vp-view-label {
@@ -2500,6 +2685,11 @@ const styles = `
     color: #f87171;
   }
 
+  .vp-status.prebook {
+    background: #17312c;
+    color: #5eead4;
+  }
+
   /* =====================================================
      DESCRIPTION
   ===================================================== */
@@ -2731,6 +2921,19 @@ const styles = `
   /* =====================================================
      ANIMATIONS
   ===================================================== */
+  @keyframes vpPrebookPulse {
+    0%, 100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    50% {
+      opacity: .45;
+      transform: scale(.78);
+    }
+  }
+
+
 
   @keyframes vpPageIn {
     from {
@@ -3144,6 +3347,32 @@ const emptyStyles = `
     box-shadow:
       0 7px 20px
       rgba(245,158,11,.15);
+  }
+
+
+  @media (max-width: 560px) {
+    .vp-prebooking-card {
+      align-items: flex-start;
+      padding: 11px;
+    }
+
+    .vp-prebooking-left {
+      align-items: flex-start;
+    }
+
+    .vp-prebooking-icon {
+      width: 34px;
+      height: 34px;
+    }
+
+    .vp-prebooking-description {
+      max-width: 220px;
+    }
+
+    .vp-prebooking-status {
+      padding: 5px 7px;
+      font-size: 7px;
+    }
   }
 
 `;

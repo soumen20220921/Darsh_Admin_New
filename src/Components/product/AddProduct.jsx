@@ -96,6 +96,13 @@ const Icon = ({ name, size = 18, strokeWidth = 1.8 }) => {
         <path d="M10 11v6M14 11v6" />
       </>
     ),
+    calendar: (
+      <>
+        <rect x="3" y="4" width="18" height="17" rx="3" />
+        <path d="M16 2v4M8 2v4M3 10h18" />
+        <path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01" />
+      </>
+    ),
     eye: (
       <>
         <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z" />
@@ -160,6 +167,7 @@ const AddProduct = () => {
     blouseAvaliable: "",
     stock: "",
     hotSell: false,
+    preBooking: false,
     description: "",
     specification: "",
     images: [null, null],
@@ -314,6 +322,7 @@ const AddProduct = () => {
       blouseAvaliable: "",
       stock: "",
       hotSell: false,
+      preBooking: false,
       description: "",
       specification: "",
       images: [null, null],
@@ -414,6 +423,7 @@ const AddProduct = () => {
     sendData.append("blouseAvaliable", formData.blouseAvaliable);
     sendData.append("stock", formData.stock);
     sendData.append("hotSell", String(Boolean(formData.hotSell)));
+    sendData.append("preBooking", String(Boolean(formData.preBooking)));
     sendData.append("description", formData.description.trim());
     sendData.append("specification", formData.specification.trim());
 
@@ -455,6 +465,7 @@ const AddProduct = () => {
       showNotification(
         "error",
         err.response?.data?.message ||
+          err.response?.data?.error ||
           "Error occurred while creating product."
       );
     } finally {
@@ -996,6 +1007,68 @@ const AddProduct = () => {
           box-shadow: 0 0 15px rgba(214,168,44,.35);
         }
 
+        /* Pre-booking */
+
+        .ap-prebooking-card {
+          transition:
+            border-color .25s ease,
+            background .25s ease,
+            box-shadow .25s ease;
+        }
+
+        .ap-prebooking-card.is-active {
+          border-color: rgba(214,168,44,.48);
+          background:
+            linear-gradient(135deg, rgba(214,168,44,.09), rgba(17,17,17,.96));
+          box-shadow: inset 0 0 0 1px rgba(214,168,44,.04);
+        }
+
+        .ap-prebooking-card.is-active .ap-hot-info strong {
+          color: #ead06d;
+        }
+
+        .ap-prebooking-note {
+          display: flex;
+          align-items: center;
+          gap: 11px;
+          margin-top: 16px;
+          padding: 12px 13px;
+          border: 1px solid rgba(214,168,44,.28);
+          border-radius: 10px;
+          background: rgba(214,168,44,.055);
+        }
+
+        .ap-prebooking-note-icon {
+          width: 34px;
+          height: 34px;
+          flex: 0 0 34px;
+          display: grid;
+          place-items: center;
+          color: #e7c85e;
+          border: 1px solid rgba(214,168,44,.25);
+          border-radius: 9px;
+          background: rgba(214,168,44,.08);
+        }
+
+        .ap-prebooking-note strong {
+          display: block;
+          color: #e8cf70;
+          font-size: 12px;
+        }
+
+        .ap-prebooking-note span {
+          display: block;
+          margin-top: 3px;
+          color: #777;
+          font-size: 11px;
+          line-height: 1.45;
+        }
+
+        .ap-prebooking-note b {
+          color: #bca65f;
+          font-weight: 700;
+        }
+
         /* Pricing */
 
         .ap-pricing-strip {
@@ -1389,6 +1462,14 @@ const AddProduct = () => {
         }
 
         @media (max-width: 680px) {
+          .ap-prebooking-note {
+            align-items: flex-start;
+          }
+
+          .ap-prebooking-card {
+            min-height: 78px;
+          }
+
           .add-product-page {
             padding: 18px 12px 70px;
           }
@@ -1909,7 +1990,52 @@ const AddProduct = () => {
                         </label>
                       </div>
                     </div>
+
+                    <div className="ap-field">
+                      <label className="ap-label">
+                        Pre-booking
+                        <span className="ap-optional">Optional</span>
+                      </label>
+
+                      <div className={`ap-hot-card ap-prebooking-card ${formData.preBooking ? "is-active" : ""}`}>
+                        <div className="ap-hot-info">
+                          <strong>
+                            {formData.preBooking
+                              ? "Pre-booking enabled"
+                              : "Regular purchase"}
+                          </strong>
+                          <span>
+                            {formData.preBooking
+                              ? "Customers can reserve this product before stock arrives."
+                              : "Enable this for upcoming or made-to-order sarees."}
+                          </span>
+                        </div>
+
+                        <label className="ap-switch">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(formData.preBooking)}
+                            onChange={(e) =>
+                              updateField("preBooking", e.target.checked)
+                            }
+                            aria-label="Enable pre-booking"
+                          />
+                          <span className="ap-switch-track" />
+                        </label>
+                      </div>
+                    </div>
                   </div>
+
+                  {formData.preBooking && (
+                    <div className="ap-prebooking-note">
+                      <div className="ap-prebooking-note-icon">
+                        <Icon name="calendar" size={16} />
+                      </div>
+                      <div>
+                        <strong>Pre-booking mode is ON</strong>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="ap-pricing-strip">
                     <div className="ap-price-stat">
@@ -2066,6 +2192,13 @@ const AddProduct = () => {
                         {formData.hotSell && (
                           <span className="ap-badge gold">
                             Hot sell
+                          </span>
+                        )}
+
+                        {formData.preBooking && (
+                          <span className="ap-badge gold">
+                            <Icon name="calendar" size={11} />
+                            Pre-booking
                           </span>
                         )}
 

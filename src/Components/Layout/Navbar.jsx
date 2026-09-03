@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
   Bell,
+  CalendarDays,
   ChevronDown,
   Command,
   Home,
@@ -36,6 +37,8 @@ const Navbar = ({ onMenuClick }) => {
     { icon: Package, label: "Products", index: 2 },
     { icon: ShoppingCart, label: "Orders", index: 3 },
     { icon: PlusCircle, label: "Add Product", index: 4 },
+    { icon: CalendarDays, label: "Pre-booking Products", index: 5 },
+    { icon: ShoppingCart, label: "Pre-booking Orders", index: 6 },
   ];
 
   const quickActions = [
@@ -63,7 +66,18 @@ const Navbar = ({ onMenuClick }) => {
       icon: PlusCircle,
       index: 4,
     },
-    
+    {
+      label: "Pre-booking Products",
+      description: "Pre-booking catalogue",
+      icon: CalendarDays,
+      index: 5,
+    },
+    {
+      label: "Pre-booking Orders",
+      description: "Manage pre-booking orders",
+      icon: ShoppingCart,
+      index: 6,
+    },
   ];
 
   const notifications = [
@@ -465,7 +479,7 @@ const Navbar = ({ onMenuClick }) => {
                         No section found
                       </p>
                       <p className="mt-1 text-[10px] text-[#555]">
-                        Try “orders”, “products” or “dashboard”
+                        Try “pre-booking”, “orders”, “products” or “dashboard”
                       </p>
                     </div>
                   )}

@@ -7,6 +7,7 @@ import {
   Eye,
   Package,
   Flame,
+  CalendarDays,
   CheckCircle,
   XCircle,
   Download,
@@ -244,7 +245,8 @@ const Product = () => {
       total: allProduct.length,
       active: allProduct.filter((p) => Number(p.stock) > 0).length,
       inactive: allProduct.filter((p) => Number(p.stock) <= 0).length,
-      hotSell: allProduct.filter((p) => p.hotSell).length,
+      hotSell: allProduct.filter((p) => Boolean(p.hotSell)).length,
+      preBooking: allProduct.filter((p) => Boolean(p.preBooking)).length,
     };
   }, [allProduct]);
 
@@ -280,7 +282,9 @@ const Product = () => {
     } else if (filterStatus === "inactive") {
       result = result.filter((product) => Number(product.stock) <= 0);
     } else if (filterStatus === "hotSell") {
-      result = result.filter((product) => product.hotSell);
+      result = result.filter((product) => Boolean(product.hotSell));
+    } else if (filterStatus === "preBooking") {
+      result = result.filter((product) => Boolean(product.preBooking));
     }
 
     result.sort((a, b) => {
@@ -325,6 +329,7 @@ const Product = () => {
         Stock: Math.max(Number(product.stock || 0), 0),
         Status: Number(product.stock || 0) > 0 ? "Active" : "Inactive",
         "Hot Sell": product.hotSell ? "Yes" : "No",
+        "Pre Booking": product.preBooking ? "Yes" : "No",
       }));
 
       const headers = Object.keys(data[0]);
@@ -496,7 +501,7 @@ const Product = () => {
         </div>
 
         {/* Quick stats */}
-        <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
           {[
             {
               label: "Total",
@@ -525,6 +530,13 @@ const Product = () => {
               active: filterStatus === "hotSell",
               onClick: () => setFilterStatus("hotSell"),
             },
+            {
+              label: "Pre-booking",
+              value: productStats.preBooking,
+              icon: CalendarDays,
+              active: filterStatus === "preBooking",
+              onClick: () => setFilterStatus("preBooking"),
+            },
           ].map((stat) => {
             const Icon = stat.icon;
 
@@ -544,6 +556,8 @@ const Product = () => {
                     className={`h-4 w-4 ${
                       stat.label === "Hot sell"
                         ? "text-[#f5ad0b]"
+                        : stat.label === "Pre-booking"
+                        ? "text-[#d6a82c]"
                         : stat.label === "Active"
                         ? "text-emerald-400"
                         : stat.label === "Out of stock"
@@ -687,7 +701,7 @@ const Product = () => {
         {/* Desktop table */}
         {!isMobile ? (
           <div className="darsh-scroll overflow-x-auto rounded-xl border border-[#2b2b2b] bg-[#151515] shadow-2xl shadow-black/10">
-            <table className="w-full min-w-[1050px] border-collapse">
+            <table className="w-full min-w-[1140px] border-collapse">
               <thead>
                 <tr className="border-b border-[#303030] bg-[#181818]">
                   <th className="px-4 py-4 text-left text-[11px] font-medium uppercase tracking-wide text-zinc-500">
@@ -701,6 +715,9 @@ const Product = () => {
                   </th>
                   <th className="px-4 py-4 text-left text-[11px] font-medium uppercase tracking-wide text-zinc-500">
                     Stock
+                  </th>
+                  <th className="px-4 py-4 text-left text-[11px] font-medium uppercase tracking-wide text-zinc-500">
+                    Type
                   </th>
                   <th className="px-4 py-4 text-left text-[11px] font-medium uppercase tracking-wide text-zinc-500">
                     Added
@@ -749,6 +766,15 @@ const Product = () => {
                               {product.hotSell && (
                                 <span className="absolute right-0.5 top-0.5 rounded-full bg-[#f5ad0b] p-0.5 text-black shadow-lg">
                                   <Flame className="h-2.5 w-2.5" />
+                                </span>
+                              )}
+
+                              {product.preBooking && (
+                                <span
+                                  className={`absolute ${product.hotSell ? "right-0.5 top-4.5" : "right-0.5 top-0.5"} rounded-full border border-[#6d541d] bg-[#1d1708] p-0.5 text-[#e6c65d] shadow-lg`}
+                                  title="Pre-booking"
+                                >
+                                  <CalendarDays className="h-2.5 w-2.5" />
                                 </span>
                               )}
                             </button>
@@ -808,6 +834,27 @@ const Product = () => {
                           </span>
                         </td>
 
+                        {/* Type */}
+                        <td className="px-4 py-3.5">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {product.preBooking && (
+                              <span className="inline-flex items-center gap-1 rounded-full border border-[#6d541d] bg-[#1d1708] px-2 py-1 text-[10px] font-medium text-[#e6c65d]">
+                                <CalendarDays className="h-3 w-3" />
+                                Pre-booking
+                              </span>
+                            )}
+                            {product.hotSell && (
+                              <span className="inline-flex items-center gap-1 rounded-full border border-[#6d541d] bg-[#211a08] px-2 py-1 text-[10px] font-medium text-[#f5ad0b]">
+                                <Flame className="h-3 w-3" />
+                                Hot
+                              </span>
+                            )}
+                            {!product.preBooking && !product.hotSell && (
+                              <span className="text-[11px] text-zinc-600">Regular</span>
+                            )}
+                          </div>
+                        </td>
+
                         {/* Added */}
                         <td className="px-4 py-3.5 text-sm text-zinc-500">
                           {getAddedDate(product)}
@@ -841,7 +888,7 @@ const Product = () => {
                   })
                 ) : (
                   <tr>
-                    <td colSpan="7" className="px-6 py-20 text-center">
+                    <td colSpan="8" className="px-6 py-20 text-center">
                       <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-[#303030] bg-[#1c1c1c]">
                         <Package className="h-6 w-6 text-zinc-600" />
                       </div>
@@ -902,6 +949,15 @@ const Product = () => {
                             <Flame className="h-2.5 w-2.5" />
                           </span>
                         )}
+
+                        {product.preBooking && (
+                          <span
+                            className={`absolute ${product.hotSell ? "right-1 top-7" : "right-1 top-1"} rounded-full border border-[#6d541d] bg-[#1d1708] p-1 text-[#e6c65d]`}
+                            title="Pre-booking"
+                          >
+                            <CalendarDays className="h-2.5 w-2.5" />
+                          </span>
+                        )}
                       </button>
 
                       <div className="min-w-0 flex-1">
@@ -938,6 +994,23 @@ const Product = () => {
                               {product.category || "Uncategorized"} · Stock{" "}
                               {stock}
                             </p>
+
+                            {(product.preBooking || product.hotSell) && (
+                              <div className="mt-1.5 flex flex-wrap gap-1">
+                                {product.preBooking && (
+                                  <span className="inline-flex items-center gap-1 rounded-full border border-[#6d541d] bg-[#1d1708] px-1.5 py-0.5 text-[9px] font-medium text-[#e6c65d]">
+                                    <CalendarDays className="h-2.5 w-2.5" />
+                                    Pre-booking
+                                  </span>
+                                )}
+                                {product.hotSell && (
+                                  <span className="inline-flex items-center gap-1 rounded-full border border-[#6d541d] bg-[#211a08] px-1.5 py-0.5 text-[9px] font-medium text-[#f5ad0b]">
+                                    <Flame className="h-2.5 w-2.5" />
+                                    Hot
+                                  </span>
+                                )}
+                              </div>
+                            )}
                           </div>
 
                           <div className="flex items-center gap-1">

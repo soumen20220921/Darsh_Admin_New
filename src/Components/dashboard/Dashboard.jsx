@@ -5,6 +5,7 @@ import {
   ArrowUpRight,
   BarChart3,
   CalendarDays,
+  CalendarClock,
   CheckCircle2,
   ChevronDown,
   Clock3,
@@ -14,6 +15,8 @@ import {
   Loader2,
   Package,
   PackageOpen,
+  Layers3,
+  ClipboardList,
   PieChart,
   RefreshCw,
   ShoppingBag,
@@ -114,6 +117,58 @@ const getStock = (product) =>
       product?.inventory ??
       0
   );
+
+const isTruthyFlag = (value) =>
+  value === true ||
+  value === 1 ||
+  String(value || "").toLowerCase().trim() === "true";
+
+const productIsPrebooking = (product) =>
+  isTruthyFlag(
+    product?.preBooking ??
+      product?.prebooking ??
+      product?.isPreBooking ??
+      product?.isPrebooking
+  );
+
+const orderItemIsPrebooking = (item, productMap = {}) => {
+  if (
+    isTruthyFlag(
+      item?.preBooking ??
+        item?.prebooking ??
+        item?.isPreBooking ??
+        item?.isPrebooking
+    )
+  ) {
+    return true;
+  }
+
+  const id = productIdOf(item);
+  const product = id ? productMap[String(id)] : null;
+
+  return productIsPrebooking(product) || productIsPrebooking(item?.product);
+};
+
+const orderIsPrebooking = (order, productMap = {}) => {
+  if (
+    isTruthyFlag(
+      order?.preBooking ??
+        order?.prebooking ??
+        order?.isPreBooking ??
+        order?.isPrebooking
+    )
+  ) {
+    return true;
+  }
+
+  const source = Array.isArray(order?.products)
+    ? order.products
+    : Array.isArray(order?.orderItems)
+    ? order.orderItems
+    : [];
+
+  return source.some((item) => orderItemIsPrebooking(item, productMap));
+};
 
 const AnimatedNumber = ({ value = 0, prefix = "", duration = 900 }) => {
   const [display, setDisplay] = useState(0);
@@ -389,6 +444,149 @@ const Dashboard = () => {
     ? allProduct.length
     : 0;
   const totalOrders = paidOrders.length;
+
+  // Prebooking analytics: backend flag is expected as `preBooking: true`.
+  // The checks are intentionally tolerant of common casing/legacy field names.
+  const productMap = useMemo(() => {
+    const map = {};
+    if (Array.isArray(allProduct)) {
+      allProduct.forEach((product) => {
+        const id = product?._id || product?.id;
+        if (id) map[String(id)] = product;
+      });
+    }
+    return map;
+  }, [allProduct]);
+
+  const prebookingProducts = useMemo(
+    () =>
+      (Array.isArray(allProduct) ? allProduct : [])
+        .filter((product) => productIsPrebooking(product))
+        .sort(
+          (a, b) =>
+            new Date(b?.updatedAt || b?.createdAt || 0) -
+            new Date(a?.updatedAt || a?.createdAt || 0)
+        ),
+    [allProduct]
+  );
+
+  const prebookingOrders = useMemo(
+    () =>
+      allOrders.filter((order) => orderIsPrebooking(order, productMap)),
+    [allOrders, productMap]
+  );
+
+  const paidPrebookingOrders = useMemo(
+    () =>
+      prebookingOrders.filter(
+        (order) =>
+          order.normalizedStatus === "paid" ||
+          order.normalizedStatus === "payment successful"
+      ),
+    [prebookingOrders]
+  );
+
+  const pendingPrebookingOrders = useMemo(
+    () =>
+      prebookingOrders.filter(
+        (order) =>
+          !["paid", "payment successful", "failed", "cancelled"].includes(
+            order.normalizedStatus
+          )
+      ),
+    [prebookingOrders]
+  );
+
+  const failedPrebookingOrders = useMemo(
+    () =>
+      prebookingOrders.filter(
+        (order) =>
+          order.normalizedStatus === "failed" ||
+          order.normalizedStatus === "cancelled"
+      ),
+    [prebookingOrders]
+  );
+
+  const prebookingRevenue = useMemo(
+    () =>
+      paidPrebookingOrders.reduce(
+        (sum, order) => sum + (Number(order?.amount) || 0),
+        0
+      ),
+    [paidPrebookingOrders]
+  );
+
+  const prebookingUnits = useMemo(
+    () =>
+      prebookingOrders.reduce(
+        (sum, order) =>
+          sum +
+          (Array.isArray(order?.products)
+            ? order.products.reduce((itemSum, item) => {
+                return (
+                  itemSum +
+                  (orderItemIsPrebooking(item, productMap)
+                    ? quantityOf(item)
+                    : 0)
+                );
+              }, 0)
+            : 0),
+        0
+      ),
+    [prebookingOrders, productMap]
+  );
+
+  const prebookingProductStock = useMemo(
+    () =>
+      prebookingProducts.reduce(
+        (sum, product) => sum + Math.max(0, getStock(product)),
+        0
+      ),
+    [prebookingProducts]
+  );
+
+  const openPrebookingSection = useCallback((type = "products") => {
+    const eventName =
+      type === "orders"
+        ? "darsh:open-prebooking-orders"
+        : "darsh:open-prebooking-products";
+
+    try {
+      localStorage.setItem(
+        "darsh:dashboard-prebooking",
+        JSON.stringify({ type, at: Date.now() })
+      );
+    } catch (error) {
+      console.warn("Could not save prebooking navigation state", error);
+    }
+
+    window.dispatchEvent(new CustomEvent(eventName, { detail: { type } }));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
+
+  const prebookingProductClick = useCallback(
+    (product) => {
+      try {
+        localStorage.setItem(
+          "darsh:dashboard-prebooking-product",
+          JSON.stringify({
+            id: product?._id || product?.id,
+            at: Date.now(),
+          })
+        );
+      } catch (error) {
+        console.warn("Could not save prebooking product", error);
+      }
+
+      window.dispatchEvent(
+        new CustomEvent("darsh:open-prebooking-product", {
+          detail: { productId: product?._id || product?.id },
+        })
+      );
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    },
+    []
+  );
 
   const totalRevenue = useMemo(
     () =>
@@ -1053,6 +1251,13 @@ const Dashboard = () => {
         ["Payment Success Rate", `${paymentSuccessRate.toFixed(1)}%`],
         ["Revenue Growth", `${revenueGrowth.toFixed(1)}%`],
         ["Order Growth", `${orderGrowth.toFixed(1)}%`],
+        ["Prebooking Products", prebookingProducts.length],
+        ["Prebooking Orders", prebookingOrders.length],
+        ["Paid Prebooking Orders", paidPrebookingOrders.length],
+        ["Pending Prebooking Orders", pendingPrebookingOrders.length],
+        ["Prebooking Revenue", prebookingRevenue],
+        ["Prebooking Units", prebookingUnits],
+        ["Prebooking Stock", prebookingProductStock],
       ];
 
       const csv = rows
@@ -1213,6 +1418,18 @@ const Dashboard = () => {
 
             <button
               type="button"
+              onClick={() => openPrebookingSection("orders")}
+              className="flex h-11 items-center gap-2 rounded-xl border border-purple-500/20 bg-purple-500/[0.08] px-4 text-sm font-semibold text-purple-300 transition hover:border-purple-400/30 hover:bg-purple-500/[0.14] hover:text-white"
+            >
+              <CalendarClock size={17} />
+              <span className="hidden sm:inline">Prebooking</span>
+              <span className="rounded-full bg-purple-400/10 px-1.5 py-0.5 text-[10px]">
+                {prebookingOrders.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
               onClick={() => {
                 goToUpload();
                 window.scrollTo({ top: 0, behavior: "smooth" });
@@ -1227,7 +1444,7 @@ const Dashboard = () => {
         </header>
 
         {/* KPI */}
-        <section className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <section className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
           <StatCard
             title={`Revenue · ${rangeConfig.label}`}
             value={rangeRevenue}
@@ -1260,6 +1477,14 @@ const Dashboard = () => {
             icon={Truck}
             subtitle={`${packingCount} packing`}
             delay={200}
+          />
+          <StatCard
+            title="Prebooking orders"
+            value={prebookingOrders.length}
+            icon={CalendarClock}
+            subtitle={`${pendingPrebookingOrders.length} pending`}
+            accent="blue"
+            delay={250}
           />
         </section>
 
@@ -1342,6 +1567,260 @@ const Dashboard = () => {
               </button>
             );
           })}
+        </section>
+
+        {/* Prebooking command centre */}
+        <section className="mb-5 grid grid-cols-1 gap-5 xl:grid-cols-3">
+          <Card className="p-5 sm:p-6 xl:col-span-2">
+            <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex items-start gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-purple-500/20 bg-purple-500/10 text-purple-300">
+                  <CalendarClock size={21} />
+                </div>
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="text-lg font-bold">Prebooking command centre</h2>
+                    <span className="rounded-full bg-purple-500/10 px-2 py-1 text-[9px] font-bold uppercase tracking-[.12em] text-purple-300">
+                      preBooking
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-[#707070]">
+                    Dedicated overview for prebook products and customer reservations.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => openPrebookingSection("products")}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-[10px] font-semibold text-[#bdbdbd] transition hover:border-purple-500/25 hover:bg-purple-500/[0.07] hover:text-white"
+                >
+                  <Layers3 size={14} />
+                  Products
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openPrebookingSection("orders")}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-purple-500/15 px-3 py-2 text-[10px] font-semibold text-purple-300 transition hover:bg-purple-500/25 hover:text-white"
+                >
+                  <ClipboardList size={14} />
+                  Orders
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              {[
+                ["Prebook products", prebookingProducts.length, "text-purple-300", Layers3],
+                ["Total prebook orders", prebookingOrders.length, "text-blue-300", ClipboardList],
+                ["Pending reservations", pendingPrebookingOrders.length, "text-amber-300", Clock3],
+                ["Prebooking revenue", prebookingRevenue, "text-emerald-300", IndianRupee],
+              ].map(([label, value, color, Icon]) => (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={() =>
+                    openPrebookingSection(
+                      label === "Prebook products" ? "products" : "orders"
+                    )
+                  }
+                  className="group rounded-2xl border border-white/[0.06] bg-[#121212] p-4 text-left transition hover:-translate-y-0.5 hover:border-purple-500/20 hover:bg-white/[0.025]"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-[.1em] text-[#666]">
+                      {label}
+                    </p>
+                    <Icon size={16} className={color} />
+                  </div>
+                  <p className={`mt-3 truncate text-2xl font-bold ${color}`}>
+                    {label === "Prebooking revenue"
+                      ? currency(value)
+                      : value}
+                  </p>
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="rounded-xl border border-white/[0.05] bg-[#101010] p-3.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] uppercase tracking-[.1em] text-[#666]">
+                    Paid
+                  </span>
+                  <span className="text-xs font-bold text-emerald-400">
+                    {paidPrebookingOrders.length}
+                  </span>
+                </div>
+                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
+                  <div
+                    className="h-full rounded-full bg-emerald-400 transition-all duration-700"
+                    style={{
+                      width: `${prebookingOrders.length
+                        ? Math.min(
+                            100,
+                            (paidPrebookingOrders.length /
+                              prebookingOrders.length) *
+                              100
+                          )
+                        : 0}%`,
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-white/[0.05] bg-[#101010] p-3.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] uppercase tracking-[.1em] text-[#666]">
+                    Pending
+                  </span>
+                  <span className="text-xs font-bold text-amber-400">
+                    {pendingPrebookingOrders.length}
+                  </span>
+                </div>
+                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
+                  <div
+                    className="h-full rounded-full bg-amber-400 transition-all duration-700"
+                    style={{
+                      width: `${prebookingOrders.length
+                        ? Math.min(
+                            100,
+                            (pendingPrebookingOrders.length /
+                              prebookingOrders.length) *
+                              100
+                          )
+                        : 0}%`,
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-white/[0.05] bg-[#101010] p-3.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] uppercase tracking-[.1em] text-[#666]">
+                    Reserved units
+                  </span>
+                  <span className="text-xs font-bold text-purple-300">
+                    {prebookingUnits}
+                  </span>
+                </div>
+                <p className="mt-2 text-[10px] text-[#5f5f5f]">
+                  Across detected prebooking orders
+                </p>
+              </div>
+            </div>
+          </Card>
+
+          <Card className="p-5 sm:p-6">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-bold">Prebooking products</h2>
+                <p className="mt-1 text-xs text-[#707070]">
+                  Products where <span className="text-purple-300">preBooking</span> is enabled.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => openPrebookingSection("products")}
+                className="rounded-lg border border-white/[0.07] bg-white/[0.03] p-2 text-[#777] transition hover:border-purple-500/20 hover:text-purple-300"
+                title="Open prebooking products"
+              >
+                <ChevronRight size={15} />
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {prebookingProducts.length ? (
+                prebookingProducts.slice(0, 6).map((product) => {
+                  const image = product?.image || product?.images?.[0];
+                  const stock = getStock(product);
+
+                  return (
+                    <button
+                      key={product?._id || product?.id || product?.productName}
+                      type="button"
+                      onClick={() => prebookingProductClick(product)}
+                      className="group flex w-full items-center gap-3 rounded-xl border border-white/[0.04] bg-[#111] p-2.5 text-left transition hover:border-purple-500/20 hover:bg-purple-500/[0.035]"
+                    >
+                      <div className="h-12 w-10 shrink-0 overflow-hidden rounded-lg bg-white/[0.04]">
+                        {image ? (
+                          <img
+                            src={
+                              String(image).startsWith("http")
+                                ? image
+                                : `${url}/img/${image}`
+                            }
+                            alt={product?.productName || "Prebooking product"}
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <div className="flex h-full items-center justify-center text-[#555]">
+                            <Layers3 size={16} />
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-xs font-semibold text-white">
+                          {product?.productName ||
+                            product?.name ||
+                            product?.title ||
+                            "Untitled product"}
+                        </p>
+                        <p className="mt-1 truncate text-[10px] text-[#666]">
+                          {product?.category || "Uncategorized"} ·{" "}
+                          {currency(
+                            product?.price ??
+                              product?.sellingPrice ??
+                              product?.rate ??
+                              0
+                          )}
+                        </p>
+                      </div>
+
+                      <span
+                        className={`shrink-0 rounded-full px-2 py-1 text-[9px] font-bold ${
+                          stock <= 0
+                            ? "bg-rose-500/10 text-rose-400"
+                            : stock <= 3
+                            ? "bg-amber-500/10 text-amber-400"
+                            : "bg-emerald-500/10 text-emerald-400"
+                        }`}
+                      >
+                        {stock <= 0 ? "No stock" : `${stock} left`}
+                      </span>
+
+                      <ChevronRight
+                        size={14}
+                        className="shrink-0 text-[#4d4d4d] transition group-hover:text-purple-300"
+                      />
+                    </button>
+                  );
+                })
+              ) : (
+                <div className="flex min-h-[235px] flex-col items-center justify-center rounded-2xl border border-dashed border-white/[0.07] bg-[#111] text-center">
+                  <CalendarClock size={28} className="text-[#555]" />
+                  <p className="mt-3 text-sm font-semibold text-[#aaa]">
+                    No prebooking products
+                  </p>
+                  <p className="mt-1 max-w-[230px] text-[10px] leading-5 text-[#666]">
+                    Enable the backend <span className="text-purple-300">preBooking</span> flag on a product to show it here.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {prebookingProducts.length > 6 && (
+              <button
+                type="button"
+                onClick={() => openPrebookingSection("products")}
+                className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl border border-white/[0.06] bg-white/[0.02] py-2.5 text-[10px] font-semibold text-[#888] transition hover:border-purple-500/20 hover:text-purple-300"
+              >
+                View all {prebookingProducts.length} prebooking products
+                <ChevronRight size={13} />
+              </button>
+            )}
+          </Card>
         </section>
 
         {/* Main charts */}
@@ -1806,6 +2285,121 @@ const Dashboard = () => {
           </Card>
         </section>
 
+        {/* Prebooking order pipeline */}
+        <section className="mt-5">
+          <Card className="p-5 sm:p-6">
+            <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/10 text-blue-300">
+                  <ClipboardList size={19} />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold">Prebooking order pipeline</h2>
+                  <p className="mt-1 text-xs text-[#707070]">
+                    Latest reservations detected from orders containing prebooking products.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => openPrebookingSection("orders")}
+                className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-[10px] font-semibold text-[#aaa] transition hover:border-blue-500/20 hover:text-blue-300"
+              >
+                Manage prebooking orders
+                <ArrowUpRight size={13} />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+              {[
+                ["All", prebookingOrders.length, "text-white", "all"],
+                ["Paid", paidPrebookingOrders.length, "text-emerald-400", "paid"],
+                ["Pending", pendingPrebookingOrders.length, "text-amber-400", "pending"],
+                ["Failed", failedPrebookingOrders.length, "text-rose-400", "failed"],
+              ].map(([label, value, color]) => (
+                <div
+                  key={label}
+                  className="rounded-xl border border-white/[0.06] bg-[#111] p-3.5"
+                >
+                  <p className="text-[10px] uppercase tracking-[.1em] text-[#666]">
+                    {label}
+                  </p>
+                  <p className={`mt-2 text-2xl font-bold ${color}`}>{value}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-4 overflow-hidden rounded-2xl border border-white/[0.06] bg-[#111]">
+              {prebookingOrders.length ? (
+                <div className="divide-y divide-white/[0.05]">
+                  {[...prebookingOrders]
+                    .sort((a, b) => b.orderDate - a.orderDate)
+                    .slice(0, 6)
+                    .map((order, index) => {
+                      const paid =
+                        order.normalizedStatus === "paid" ||
+                        order.normalizedStatus === "payment successful";
+                      const failed =
+                        order.normalizedStatus === "failed" ||
+                        order.normalizedStatus === "cancelled";
+
+                      return (
+                        <button
+                          key={order?._id || order?.id || index}
+                          type="button"
+                          onClick={() => setDashboardPopup({ type: "order", order })}
+                          className="flex w-full items-center gap-3 px-3 py-3.5 text-left transition hover:bg-white/[0.025] sm:px-4"
+                        >
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-purple-500/10 text-purple-300">
+                            <CalendarClock size={16} />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-xs font-semibold text-white">
+                              {getOrderCustomerName(order)}
+                            </p>
+                            <p className="mt-1 truncate text-[10px] text-[#666]">
+                              #{String(order?._id || order?.id || "N/A").slice(0, 14)} ·{" "}
+                              {order.orderDate.toLocaleDateString("en-IN", {
+                                day: "2-digit",
+                                month: "short",
+                                year: "numeric",
+                              })}
+                            </p>
+                          </div>
+                          <span
+                            className={`hidden rounded-full px-2.5 py-1 text-[9px] font-bold sm:inline-flex ${
+                              paid
+                                ? "bg-emerald-500/10 text-emerald-400"
+                                : failed
+                                ? "bg-rose-500/10 text-rose-400"
+                                : "bg-amber-500/10 text-amber-400"
+                            }`}
+                          >
+                            {paid ? "Paid" : failed ? "Failed" : "Pending"}
+                          </span>
+                          <span className="shrink-0 text-xs font-bold text-white">
+                            {currency(order?.amount)}
+                          </span>
+                          <ChevronRight size={14} className="shrink-0 text-[#4d4d4d]" />
+                        </button>
+                      );
+                    })}
+                </div>
+              ) : (
+                <div className="flex min-h-[160px] flex-col items-center justify-center text-center">
+                  <ClipboardList size={26} className="text-[#555]" />
+                  <p className="mt-3 text-sm font-semibold text-[#aaa]">
+                    No prebooking orders yet
+                  </p>
+                  <p className="mt-1 text-[10px] text-[#666]">
+                    Orders will appear here automatically when their product has preBooking enabled.
+                  </p>
+                </div>
+              )}
+            </div>
+          </Card>
+        </section>
+
         {/* Bottom analytics */}
         <section className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-3">
           <Card className="p-5 sm:p-6">
@@ -1879,6 +2473,7 @@ const Dashboard = () => {
                 ["Products", totalProducts, "text-amber-400"],
                 ["Paid orders", totalOrders, "text-emerald-400"],
                 ["Dispatch", awaitingDispatch.length, "text-blue-400"],
+                ["Prebooking", prebookingOrders.length, "text-purple-400"],
               ].map(([label, value, color]) => (
                 <div
                   key={label}
@@ -1935,6 +2530,36 @@ const Dashboard = () => {
                 <p className="mt-3 text-xs font-semibold">View orders</p>
                 <p className="mt-1 text-[10px] text-[#646464]">
                   Manage customer orders
+                </p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => openPrebookingSection("products")}
+                className="group rounded-xl border border-white/[0.06] bg-[#121212] p-4 text-left transition hover:-translate-y-0.5 hover:border-purple-500/25 hover:bg-purple-500/[0.04]"
+              >
+                <CalendarClock
+                  size={19}
+                  className="text-purple-400 transition group-hover:scale-110"
+                />
+                <p className="mt-3 text-xs font-semibold">Prebook products</p>
+                <p className="mt-1 text-[10px] text-[#646464]">
+                  {prebookingProducts.length} active products
+                </p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => openPrebookingSection("orders")}
+                className="group rounded-xl border border-white/[0.06] bg-[#121212] p-4 text-left transition hover:-translate-y-0.5 hover:border-blue-500/25 hover:bg-blue-500/[0.04]"
+              >
+                <ClipboardList
+                  size={19}
+                  className="text-blue-400 transition group-hover:scale-110"
+                />
+                <p className="mt-3 text-xs font-semibold">Prebook orders</p>
+                <p className="mt-1 text-[10px] text-[#646464]">
+                  {pendingPrebookingOrders.length} need attention
                 </p>
               </button>
 
@@ -2039,7 +2664,7 @@ const Dashboard = () => {
         )}
 
         {/* Responsive dashboard insights */}
-        <section className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <section className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <div className="rounded-2xl border border-amber-500/10 bg-gradient-to-br from-amber-500/[0.07] to-transparent p-4">
             <p className="text-[10px] font-semibold uppercase tracking-[.14em] text-amber-400">Revenue focus</p>
             <p className="mt-2 text-sm font-semibold text-white">7-day view is your default snapshot.</p>
@@ -2050,6 +2675,16 @@ const Dashboard = () => {
             <p className="mt-2 text-sm font-semibold text-white">Charts and orders are interactive.</p>
             <p className="mt-1 text-[10px] leading-5 text-[#707070]">Tap a bar, order, best seller, or alert to see more.</p>
           </div>
+          <div className="rounded-2xl border border-purple-500/10 bg-gradient-to-br from-purple-500/[0.06] to-transparent p-4">
+            <p className="text-[10px] font-semibold uppercase tracking-[.14em] text-purple-300">Prebooking</p>
+            <p className="mt-2 text-sm font-semibold text-white">
+              {prebookingProducts.length} products · {prebookingOrders.length} orders.
+            </p>
+            <p className="mt-1 text-[10px] leading-5 text-[#707070]">
+              Use the dedicated pipeline to manage reservations and pending payments.
+            </p>
+          </div>
+
           <div className="rounded-2xl border border-emerald-500/10 bg-gradient-to-br from-emerald-500/[0.06] to-transparent p-4">
             <p className="text-[10px] font-semibold uppercase tracking-[.14em] text-emerald-400">Inventory</p>
             <p className="mt-2 text-sm font-semibold text-white">Low-stock items stay one tap away.</p>

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import {
   ArrowLeft,
+  CalendarDays,
   AlertCircle,
   CheckCircle2,
   ChevronDown,
@@ -299,6 +300,11 @@ const normalizeBlouseValue = (value) => {
     hotSell:
       product?.hotSell === true ||
       product?.hotSell === "true",
+    preBooking:
+      product?.preBooking === true ||
+      product?.preBooking === "true" ||
+      product?.preBooking === 1 ||
+      product?.preBooking === "1",
     description: product?.description || "",
     specification:
       product?.specification || "",
@@ -412,6 +418,25 @@ const normalizeBlouseValue = (value) => {
     setIsChanged(true);
   };
 
+  /* =======================================================
+     PRE-BOOKING
+
+     Backend field:
+     preBooking
+
+     Kept as a boolean in React state and serialized
+     explicitly for both FormData and JSON updates.
+     ======================================================= */
+
+  const handlePreBookingChange = (e) => {
+    setFormData((prev) => ({
+      ...prev,
+      preBooking: e.target.checked,
+    }));
+
+    setIsChanged(true);
+  };
+
  
   /* =======================================================
      NOTIFICATION
@@ -467,6 +492,11 @@ const normalizeBlouseValue = (value) => {
       hotSell:
         product?.hotSell === true ||
         product?.hotSell === "true",
+      preBooking:
+        product?.preBooking === true ||
+        product?.preBooking === "true" ||
+        product?.preBooking === 1 ||
+        product?.preBooking === "1",
       description:
         product?.description || "",
       specification:
@@ -626,7 +656,12 @@ const normalizeBlouseValue = (value) => {
 
         sendData.append(
           "hotSell",
-          formData.hotSell
+          String(Boolean(formData.hotSell))
+        );
+
+        sendData.append(
+          "preBooking",
+          String(Boolean(formData.preBooking))
         );
 
         sendData.append(
@@ -696,6 +731,9 @@ const normalizeBlouseValue = (value) => {
 
           hotSell:
             Boolean(formData.hotSell),
+
+          preBooking:
+            Boolean(formData.preBooking),
 
           description:
             formData.description,
@@ -1378,6 +1416,112 @@ const normalizeBlouseValue = (value) => {
         }
 
         /* ==================================================
+           PRE-BOOKING
+        ================================================== */
+
+        .ep-prebooking-box {
+          position: relative;
+          min-height: 35px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          padding: 7px 10px 7px 12px;
+          border: 1px solid #343434;
+          border-radius: 6px;
+          background: #181818;
+          transition:
+            border-color .25s ease,
+            background .25s ease,
+            box-shadow .25s ease;
+        }
+
+        .ep-prebooking-box.active {
+          border-color: #5a5a5a;
+          background: #1d1d1d;
+          box-shadow:
+            inset 0 0 0 1px rgba(255,255,255,.025),
+            0 8px 25px rgba(0,0,0,.16);
+        }
+
+        .ep-prebooking-left {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          min-width: 0;
+          color: #ccc;
+          font-size: 12px;
+        }
+
+        .ep-prebooking-icon {
+          width: 28px;
+          height: 28px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+          border-radius: 8px;
+          border: 1px solid #353535;
+          background: #232323;
+          color: #aaa;
+          transition: .25s ease;
+        }
+
+        .ep-prebooking-box.active .ep-prebooking-icon {
+          color: #fff;
+          border-color: #555;
+          background: #2a2a2a;
+        }
+
+        .ep-prebooking-copy {
+          min-width: 0;
+        }
+
+        .ep-prebooking-copy strong {
+          display: block;
+          color: #ddd;
+          font-size: 11px;
+          font-weight: 650;
+        }
+
+        .ep-prebooking-copy span {
+          display: block;
+          margin-top: 2px;
+          color: #6e6e6e;
+          font-size: 9px;
+          line-height: 1.35;
+        }
+
+        .ep-prebooking-box.active .ep-prebooking-copy span {
+          color: #888;
+        }
+
+        .ep-prebooking-status {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          margin-top: 8px;
+          color: #777;
+          font-size: 9px;
+        }
+
+        .ep-prebooking-status-dot {
+          width: 5px;
+          height: 5px;
+          border-radius: 50%;
+          background: #555;
+        }
+
+        .ep-prebooking-box.active .ep-prebooking-status {
+          color: #bbb;
+        }
+
+        .ep-prebooking-box.active .ep-prebooking-status-dot {
+          background: #eee;
+          box-shadow: 0 0 8px rgba(255,255,255,.45);
+        }
+
+        /* ==================================================
            PREVIEW
         ================================================== */
 
@@ -1448,6 +1592,30 @@ const normalizeBlouseValue = (value) => {
           color: #eee;
           font-size: 13px;
           font-weight: 700;
+        }
+
+        .ep-review-flags {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 5px;
+          margin-top: 7px;
+        }
+
+        .ep-review-flag {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          padding: 3px 6px;
+          border: 1px solid #333;
+          border-radius: 999px;
+          background: #202020;
+          color: #888;
+          font-size: 8px;
+          line-height: 1;
+        }
+
+        .ep-review-flag svg {
+          color: #aaa;
         }
 
         /* ==================================================
@@ -1807,6 +1975,14 @@ const normalizeBlouseValue = (value) => {
 
           .ep-images-grid {
             grid-template-columns: 1fr;
+          }
+
+          .ep-prebooking-box {
+            align-items: flex-start;
+          }
+
+          .ep-prebooking-copy span {
+            max-width: 185px;
           }
 
           .ep-image-box {
@@ -2174,6 +2350,62 @@ const normalizeBlouseValue = (value) => {
                       onChange={
                         handleHotSellChange
                       }
+                    />
+
+                    <span className="ep-switch-track">
+                      <span className="ep-switch-thumb" />
+                    </span>
+                  </label>
+                </div>
+              </div>
+
+
+              {/* PRE-BOOKING */}
+
+              <div className="ep-field">
+                <label>
+                  Pre-booking
+                </label>
+
+                <div
+                  className={`ep-prebooking-box ${
+                    formData.preBooking ? "active" : ""
+                  }`}
+                >
+                  <div className="ep-prebooking-left">
+                    <div className="ep-prebooking-icon">
+                      <CalendarDays size={15} />
+                    </div>
+
+                    <div className="ep-prebooking-copy">
+                      <strong>
+                        Accept pre-bookings
+                      </strong>
+                      <span>
+                        Keep this product available before stock arrives.
+                      </span>
+                      <div className="ep-prebooking-status">
+                        <span className="ep-prebooking-status-dot" />
+                        {formData.preBooking
+                          ? "Pre-booking enabled"
+                          : "Pre-booking disabled"}
+                      </div>
+                    </div>
+                  </div>
+
+                  <label
+                    className="ep-switch"
+                    title={
+                      formData.preBooking
+                        ? "Disable pre-booking"
+                        : "Enable pre-booking"
+                    }
+                  >
+                    <input
+                      type="checkbox"
+                      checked={Boolean(formData.preBooking)}
+                      onChange={handlePreBookingChange}
+                      aria-label="Enable pre-booking"
                     />
 
                     <span className="ep-switch-track">

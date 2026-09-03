@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   BarChart3,
+  CalendarDays,
   ChevronDown,
   LayoutDashboard,
   Package,
@@ -25,6 +26,7 @@ export function Sidebar({
     overview: true,
     userManagement: true,
     ecommerce: true,
+    preBooking: true,
   });
 
   const [isMobile, setIsMobile] = useState(false);
@@ -62,6 +64,13 @@ export function Sidebar({
       }));
     }
 
+    if (activeTab >= 5 && activeTab <= 6) {
+      setExpandedSections((prev) => ({
+        ...prev,
+        preBooking: true,
+      }));
+    }
+
   }, [activeTab]);
 
   const handleClick = (tabIndex) => {
@@ -86,12 +95,7 @@ export function Sidebar({
         title: "Overview",
         icon: BarChart3,
         items: [
-          {
-            icon: LayoutDashboard,
-            label: "Dashboard",
-            index: 0,
-            description: "Analytics & insights",
-          },
+          { icon: LayoutDashboard, label: "Dashboard", index: 0, description: "Analytics & insights" },
         ],
       },
       {
@@ -99,12 +103,7 @@ export function Sidebar({
         title: "User Management",
         icon: ShieldCheck,
         items: [
-          {
-            icon: Users,
-            label: "All Users",
-            index: 1,
-            description: "Manage users",
-          },
+          { icon: Users, label: "All Users", index: 1, description: "Manage users" },
         ],
       },
       {
@@ -112,27 +111,20 @@ export function Sidebar({
         title: "E-commerce",
         icon: Store,
         items: [
-          {
-            icon: Package,
-            label: "Products",
-            index: 2,
-            description: "Manage inventory",
-          },
-          {
-            icon: ShoppingCart,
-            label: "Orders",
-            index: 3,
-            description: "Paid & unpaid orders",
-          },
-          {
-            icon: PlusCircle,
-            label: "Add Product",
-            index: 4,
-            description: "Create new product",
-          },
+          { icon: Package, label: "Products", index: 2, description: "Manage inventory" },
+          { icon: ShoppingCart, label: "Orders", index: 3, description: "Paid & unpaid orders" },
+          { icon: PlusCircle, label: "Add Product", index: 4, description: "Create new product" },
         ],
       },
-      
+      {
+        id: "preBooking",
+        title: "Pre-booking",
+        icon: CalendarDays,
+        items: [
+          { icon: CalendarDays, label: "Pre-booking Products", index: 5, description: "Manage pre-booking catalogue" },
+          { icon: ShoppingCart, label: "Pre-booking Orders", index: 6, description: "Manage pre-booking orders" },
+        ],
+      },
     ],
     []
   );

@@ -17,6 +17,8 @@ import User from "../users/User.jsx";
 import Product from "../product/Product.jsx";
 import Order from "../orders/Order.jsx";
 import AddProduct from "../product/AddProduct.jsx";
+import PreBookingProduct from "../product/PreBookingProduct.jsx";
+import PreBookingOrder from "../orders/PreBookingOrder.jsx";
 import Dashboard from "../dashboard/Dashboard.jsx";
 
 const Layout = () => {
@@ -103,6 +105,10 @@ const Layout = () => {
         return <Order />;
       case 4:
         return <AddProduct />;
+      case 5:
+        return <PreBookingProduct />;
+      case 6:
+        return <PreBookingOrder />;
       default:
         return <Dashboard />;
     }
@@ -115,6 +121,8 @@ const Layout = () => {
       2: "Products",
       3: "Orders",
       4: "Add Product",
+      5: "Pre-booking Products",
+      6: "Pre-booking Orders",
     }[Number(tab)] || "Dashboard";
 
   return (
