@@ -5,7 +5,7 @@ const AppContext = createContext();
 
 export const AppProvider = ({ children }) => {
   //  const url = "https://api2.darshsaree.com"
-   const url = "http://localhost:8001"
+   const url = "https://api.darshsaree.in"
 
   const [tab, setTab] = useState(0);
   const [allProduct, setAllProduct] = useState(null);
