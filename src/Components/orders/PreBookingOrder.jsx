@@ -160,7 +160,7 @@ export default function OrderListDesign() {
   const { orders, getOrders } = useAppContext();
 
   const isPreBookingOrder = (order) => {
-    if (Boolean(order?.preBookingOrder)) return true;
+    if (Boolean(order?.preBooking)) return true;
     const items = Array.isArray(order?.orderItems) ? order.orderItems : [];
     return items.some((item) => Boolean(item?.preBooking || item?.product?.preBooking));
   };
