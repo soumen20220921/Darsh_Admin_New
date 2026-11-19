@@ -1,5 +1,6 @@
 import { X, Trash2, Package, AlertTriangle } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { createPortal } from "react-dom";
 import { useEffect, useRef, useState } from "react";
 import { useAppContext } from "../../context/Context";
 
@@ -19,6 +20,8 @@ const DeleteModal = ({ product, onConfirm, onCancel }) => {
     if (!product) return;
 
     // Prevent background page scrolling
+    if (typeof document === "undefined") return;
+
     const originalOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
 
@@ -103,22 +106,16 @@ const DeleteModal = ({ product, onConfirm, onCancel }) => {
   =========================================================
   */
 
-  return (
+  return createPortal(
     <AnimatePresence>
       <motion.div
         className="
-          fixed
-          inset-0
-          z-[9999]
-          flex
-          items-center
-          justify-center
-          overflow-y-auto
-          bg-black/55
-          mt-5
-          p-4
-          backdrop-blur-xl
-          supports-[backdrop-filter]:bg-black/45
+          fixed inset-0 z-[99999]
+          flex items-center justify-center
+          overflow-y-auto overscroll-contain
+          bg-black/65 p-3 backdrop-blur-md
+          sm:p-5
+          supports-[backdrop-filter]:bg-black/55
         "
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -203,8 +200,8 @@ const DeleteModal = ({ product, onConfirm, onCancel }) => {
           className="
             relative
             my-auto
-            w-full
-            max-w-[420px]
+            flex w-full max-w-[440px] flex-col
+            max-h-[calc(100dvh-1.5rem)]
             overflow-hidden
             rounded-2xl
             border
@@ -233,6 +230,9 @@ const DeleteModal = ({ product, onConfirm, onCancel }) => {
             stiffness: 380,
             damping: 28,
           }}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-product-title"
           onMouseDown={(e) => e.stopPropagation()}
         >
           {/* =================================================
@@ -283,7 +283,7 @@ const DeleteModal = ({ product, onConfirm, onCancel }) => {
               CONTENT
           ================================================= */}
 
-          <div className="p-5 sm:p-6">
+          <div className="min-h-0 overflow-y-auto overscroll-contain p-5 sm:p-6">
             {/* =================================================
                 DELETE ICON
             ================================================= */}
@@ -382,7 +382,7 @@ const DeleteModal = ({ product, onConfirm, onCancel }) => {
               }}
               className="mt-4 text-center"
             >
-              <h2 className="text-xl font-bold tracking-tight text-white">
+              <h2 id="delete-product-title" className="text-xl font-bold tracking-tight text-white">
                 Delete product?
               </h2>
 
@@ -695,7 +695,8 @@ const DeleteModal = ({ product, onConfirm, onCancel }) => {
           </div>
         </motion.div>
       </motion.div>
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 };
 
