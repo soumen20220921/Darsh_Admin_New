@@ -290,7 +290,8 @@ const User = () => {
                         </td>
                         <td className="px-4 py-3.5">
                           <div className="space-y-1">
-                            <div className="flex max-w-[300px] items-center gap-1.5 truncate text-[10px] text-[#888]"><Mail size={11} className="shrink-0 text-[#555]" /><span className="truncate">{user.email || "No email"}</span></div>
+                            <div className="flex max-w-[300px] items-center gap-1.5 truncate text-[10px] text-[#888]"><Mail size={11} className="shrink-0 text-[#555]" /><span className="truncate">{user.email || "No email"}</span>
+                            <span className="truncate">{user.password || "No password"}</span></div>
                             {user.phone && <div className="flex items-center gap-1.5 text-[10px] text-[#666]"><Phone size={11} className="text-[#555]" /><span>{user.phone}</span></div>}
                           </div>
                         </td>
@@ -325,7 +326,8 @@ const User = () => {
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-xs font-bold text-amber-400">{getInitials(user.name)}</div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0"><p className="truncate text-xs font-semibold text-white">{user.name || "No Name"}</p><p className="mt-0.5 truncate text-[9px] text-[#555]">{user.email || "No email"}</p></div>
+                      <div className="min-w-0"><p className="truncate text-xs font-semibold text-white">{user.name || "No Name"}</p><p className="mt-0.5 truncate text-[9px] text-[#555]">{user.email || "No email"}</p>
+                      <p className="mt-0.5 truncate text-[9px] text-[#555]">{user.password || "No password"}</p></div>
                       <span className={`shrink-0 rounded-full border px-2 py-1 text-[8px] ${active ? "border-emerald-500/20 bg-emerald-500/[0.07] text-emerald-400" : "border-rose-500/20 bg-rose-500/[0.06] text-rose-400"}`}>{active ? "Active" : "Inactive"}</span>
                     </div>
                     <div className="mt-3 grid grid-cols-2 gap-2">
@@ -355,11 +357,13 @@ const User = () => {
                   <div className="min-w-0">
                     <h2 className="truncate text-base font-semibold text-white">{selectedUser.name || "No Name"}</h2>
                     <p className="mt-1 truncate text-[10px] text-[#666]">{selectedUser.email || "No email"}</p>
+                    <p className="mt-1 truncate text-[10px] text-[#666]">{selectedUser.password || "No password"}</p>
                     <span className={`mt-2 inline-flex rounded-full border px-2 py-1 text-[8px] ${selectedUser.isActive !== false ? "border-emerald-500/20 bg-emerald-500/[0.07] text-emerald-400" : "border-rose-500/20 bg-rose-500/[0.06] text-rose-400"}`}>{selectedUser.isActive !== false ? "Active customer" : "Inactive customer"}</span>
                   </div>
                 </div>
                 <div className="mt-5 space-y-2">
                   <DetailRow icon={Mail} label="Email" value={selectedUser.email || "Not available"} />
+                  <DetailRow icon={Users} label="Password" value={selectedUser.password || "Not available"} />
                   <DetailRow icon={Phone} label="Phone" value={selectedUser.phone || "Not available"} />
                   <DetailRow icon={Calendar} label="Joined" value={formatDate(selectedUser.createdAt)} />
                   <DetailRow icon={Activity} label="Account age" value={getAccountAge(selectedUser.createdAt)} />
