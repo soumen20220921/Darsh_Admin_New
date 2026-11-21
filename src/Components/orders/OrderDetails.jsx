@@ -35,6 +35,7 @@ import {
 } from "lucide-react";
 import axios from "axios";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useAppContext } from "../../context/Context";
 import html2pdf from "html2pdf.js";
 
@@ -94,6 +95,8 @@ const formatDate = (date) =>
         year: "numeric",
       })
     : "—";
+
+const invoiceNoForPrint = (id) => `DARSH-${String(id || "ORDER").slice(-8).toUpperCase()}`;
 
 const formatDateTime = (date) =>
   date
@@ -323,35 +326,31 @@ const OrderDetails = ({ order, onClose }) => {
   const items = order?.orderItems || [];
 
   const totals = useMemo(() => {
-    const subtotal = items.reduce((sum, item) => numberValue(sum) + numberValue(item?.price), 0);
-
-   
-
+    const subtotal = items.reduce(
+      (sum, item) => sum + numberValue(item?.price),
+      0
+    );
     const discount = firstNumber(
       order?.discount,
       order?.discountAmount,
       order?.couponDiscount
     );
-
     const shipping = firstNumber(
       order?.shippingCharge,
       order?.shipping,
       DEFAULT_SHIPPING
     );
-
-
+    const taxableValue = Math.max(subtotal - discount, 0);
     const amountFromOrder = numberValue(order?.amount);
-    const calculatedGrandTotal = Math.max(
-        shipping,
-      0
-    );
+    const calculatedGrandTotal = taxableValue + shipping;
 
     return {
       subtotal,
       discount,
       shipping,
-     
-      grandTotal: amountFromOrder > 0 ? amountFromOrder : calculatedGrandTotal,
+      taxableValue,
+      grandTotal:
+        amountFromOrder > 0 ? amountFromOrder : calculatedGrandTotal,
     };
   }, [items, order]);
 
@@ -477,46 +476,101 @@ const OrderDetails = ({ order, onClose }) => {
     setIsShareMenuOpen(false);
   };
 
+  const waitForInvoiceAssets = async (root) => {
+    if (document.fonts?.ready) await document.fonts.ready;
+
+    await Promise.all(
+      Array.from(root.querySelectorAll("img")).map((image) => {
+        if (image.complete) return Promise.resolve();
+        return new Promise((resolve) => {
+          image.onload = resolve;
+          image.onerror = resolve;
+        });
+      })
+    );
+  };
+
+  const createInvoicePrintClone = () => {
+    if (!invoiceRef.current) return null;
+
+    const wrapper = document.createElement("div");
+    wrapper.setAttribute("data-darsh-invoice-export", "true");
+    wrapper.style.cssText =
+      "position:fixed;left:0;top:0;z-index:2147483000;width:794px;" +
+      "background:#fff;color:#111;opacity:1;pointer-events:none;overflow:visible;";
+
+    const clone = invoiceRef.current.cloneNode(true);
+    clone.removeAttribute("id");
+    clone.style.cssText =
+      "display:block;position:relative;width:794px;min-height:1123px;height:auto;" +
+      "margin:0;padding:34px;background:#fff;color:#111;opacity:1;visibility:visible;" +
+      "font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:1.4;box-sizing:border-box;";
+
+    wrapper.appendChild(clone);
+    document.body.appendChild(wrapper);
+    return { wrapper, clone };
+  };
+
   const handlePrintInvoice = async () => {
-    if (!invoiceRef.current) return;
+    if (!invoiceRef.current || isPrinting) return;
 
     setIsPrinting(true);
-
     const customerName =
-      order?.userShipping?.FullName?.replace(/[^a-z0-9]+/gi, "_") || "Customer";
-    const invoiceNo = `DARSH-${String(order?._id || "ORDER").slice(-8).toUpperCase()}`;
-
-    const options = {
-      margin: [7, 7, 7, 7],
-      filename: `${invoiceNo}_${customerName}.pdf`,
-      image: { type: "jpeg", quality: 0.98 },
-      html2canvas: {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: "#ffffff",
-        logging: false,
-      },
-      jsPDF: {
-        unit: "mm",
-        format: "a4",
-        orientation: "portrait",
-      },
-      pagebreak: { mode: ["css", "legacy"] },
-    };
+      order?.userShipping?.FullName?.replace(/[^a-z0-9]+/gi, "_") ||
+      "Customer";
+    const invoiceNo = invoiceNoForPrint(order?._id);
+    let exportNodes;
 
     try {
-      await html2pdf().set(options).from(invoiceRef.current).save();
-      showNotification("success", "Invoice generated successfully");
+      exportNodes = createInvoicePrintClone();
+      if (!exportNodes) throw new Error("Invoice content is not available");
+
+      await waitForInvoiceAssets(exportNodes.clone);
+
+      await html2pdf()
+        .set({
+          margin: 0,
+          filename: `${invoiceNo}_${customerName}.pdf`,
+          image: { type: "jpeg", quality: 0.98 },
+          html2canvas: {
+            scale: 2,
+            useCORS: true,
+            allowTaint: false,
+            backgroundColor: "#ffffff",
+            logging: false,
+            scrollX: 0,
+            scrollY: 0,
+            windowWidth: 794,
+          },
+          jsPDF: {
+            unit: "mm",
+            format: "a4",
+            orientation: "portrait",
+            compress: true,
+          },
+          pagebreak: {
+            mode: ["css", "legacy"],
+            avoid: ["tr", ".invoice-no-break"],
+          },
+        })
+        .from(exportNodes.clone)
+        .save();
+
+      showNotification("success", "Invoice PDF downloaded successfully");
     } catch (error) {
-      showNotification("error", `Invoice generation failed: ${error.message}`);
+      console.error("Darsh invoice PDF error:", error);
+      showNotification(
+        "error",
+        `Invoice download failed: ${error?.message || "Please try again"}`
+      );
     } finally {
+      exportNodes?.wrapper?.remove();
       setIsPrinting(false);
     }
   };
 
-  const handlePrintBrowser = () => {
-    const node = invoiceRef.current;
-    if (!node) return;
+  const handlePrintBrowser = async () => {
+    if (!invoiceRef.current) return;
 
     const printWindow = window.open("", "_blank", "width=900,height=1000");
     if (!printWindow) {
@@ -524,32 +578,79 @@ const OrderDetails = ({ order, onClose }) => {
       return;
     }
 
-    printWindow.document.write(`
-      <!doctype html>
-      <html>
-        <head>
-          <title>Tax Invoice</title>
-          <meta charset="utf-8" />
-          <style>
-            * { box-sizing: border-box; }
-            body { margin: 0; padding: 24px; background: #fff; color: #111; font-family: Arial, sans-serif; }
-            @media print {
-              body { padding: 0; }
-              @page { size: A4; margin: 8mm; }
-            }
-          </style>
-        </head>
-        <body>${node.innerHTML}</body>
-      </html>
-    `);
-    printWindow.document.close();
-    printWindow.focus();
-    setTimeout(() => {
-      printWindow.print();
-      printWindow.close();
-    }, 350);
-  };
+    let exportNodes;
 
+    try {
+      exportNodes = createInvoicePrintClone();
+      if (!exportNodes) throw new Error("Invoice content is not available");
+      await waitForInvoiceAssets(exportNodes.clone);
+
+      const printStyles = `
+        * { box-sizing: border-box; }
+        html, body {
+          margin: 0 !important; padding: 0 !important;
+          background: #fff !important; color: #111 !important;
+          font-family: Arial, Helvetica, sans-serif;
+          -webkit-print-color-adjust: exact; print-color-adjust: exact;
+        }
+        body { width: 100%; }
+        [data-darsh-invoice-export] {
+          position: static !important; width: 100% !important;
+          overflow: visible !important; background: #fff !important;
+        }
+        [data-darsh-invoice-export] > div {
+          width: 100% !important; min-height: 0 !important;
+          margin: 0 auto !important; padding: 9mm !important;
+          background: #fff !important; color: #111 !important;
+        }
+        table { width: 100%; border-collapse: collapse; }
+        tr, img, .invoice-no-break {
+          break-inside: avoid !important; page-break-inside: avoid !important;
+        }
+        thead { display: table-header-group; }
+        tfoot { display: table-footer-group; }
+        @page { size: A4 portrait; margin: 0; }
+        @media screen {
+          body { padding: 12px !important; }
+          [data-darsh-invoice-export] {
+            max-width: 210mm; margin: 0 auto;
+            box-shadow: 0 2px 18px rgba(0,0,0,.15);
+          }
+        }
+      `;
+
+      printWindow.document.open();
+      printWindow.document.write(`
+        <!doctype html>
+        <html>
+          <head>
+            <meta charset="utf-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1" />
+            <title>${invoiceNoForPrint(order?._id)}</title>
+            <style>${printStyles}</style>
+          </head>
+          <body>${exportNodes.wrapper.outerHTML}</body>
+        </html>
+      `);
+      printWindow.document.close();
+
+      await new Promise((resolve) => {
+        printWindow.onload = resolve;
+        setTimeout(resolve, 600);
+      });
+      printWindow.focus();
+      printWindow.print();
+    } catch (error) {
+      console.error("Darsh invoice print error:", error);
+      showNotification(
+        "error",
+        `Unable to print invoice: ${error?.message || "Please try again"}`
+      );
+      printWindow.close();
+    } finally {
+      exportNodes?.wrapper?.remove();
+    }
+  };
   const tabs = [
     { id: "overview", label: "Overview", icon: Eye },
     { id: "products", label: "Products", icon: Package },
@@ -881,6 +982,165 @@ const OrderDetails = ({ order, onClose }) => {
         </div>
       </div>
 
+      {/* Always-visible shipment and tracking panel: stays above every tab, including invoice. */}
+      <div className="mx-auto max-w-[1500px] px-3 pt-3 sm:px-5 lg:px-7">
+                <SectionCard
+                  title="Shipment & Tracking"
+                  icon={Truck}
+                  action={
+                    <span
+                      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold ${
+                        order?.trackingId
+                          ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-300"
+                          : order?.orderDispatch
+                            ? "border-amber-400/20 bg-amber-400/10 text-amber-300"
+                            : "border-white/10 bg-white/[0.04] text-white/40"
+                      }`}
+                    >
+                      <span className={`h-1.5 w-1.5 rounded-full ${
+                        order?.trackingId ? "bg-emerald-400" : order?.orderDispatch ? "bg-amber-400" : "bg-white/30"
+                      }`} />
+                      {order?.trackingId ? "Tracking active" : order?.orderDispatch ? "Awaiting AWB" : "Not dispatched"}
+                    </span>
+                  }
+                >
+                  <div className="space-y-4">
+                    {/* Shipment identity */}
+                    <div className="rounded-2xl border border-white/10 bg-[#101010] p-3.5 sm:p-5">
+                      <div className="flex items-start gap-3">
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-amber-400/10 text-amber-300">
+                          <Truck className="h-5 w-5" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/35">
+                            Courier partner
+                          </p>
+                          <p className="mt-1 break-words text-sm font-bold text-white sm:text-base">
+                            {order?.courierPartner || order?.courier || "Courier not assigned"}
+                          </p>
+                          <p className="mt-1 text-[10px] text-white/35">
+                            Order #{String(order?._id || "").slice(-8).toUpperCase()}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 border-t border-white/10 pt-4">
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/35">
+                            Tracking / AWB number
+                          </p>
+                          {order?.trackingId && (
+                            <span className="shrink-0 text-[10px] font-semibold text-emerald-300">
+                              Added
+                            </span>
+                          )}
+                        </div>
+
+                        {order?.trackingId ? (
+                          <>
+                            <div className="flex min-w-0 flex-col gap-2.5 sm:flex-row sm:items-center">
+                              <div className="min-w-0 flex-1 rounded-xl border border-amber-400/20 bg-amber-400/[0.06] px-3.5 py-3">
+                                <p className="min-w-0 break-all font-mono text-sm font-bold leading-relaxed tracking-normal text-amber-300 sm:text-lg sm:tracking-wide">
+                                  {order.trackingId}
+                                </p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => copyToClipboard(order.trackingId, "Tracking ID")}
+                                className="flex min-h-11 w-full shrink-0 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-xs font-bold text-white transition hover:border-amber-400/30 hover:bg-amber-400/5 sm:w-auto"
+                              >
+                                <Copy className="h-4 w-4" />
+                                Copy AWB
+                              </button>
+                            </div>
+
+                            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const courier = normalizeCourier(order?.courierPartner || order?.courier);
+                                  window.open(COURIER_TRACKING_URLS[courier], "_blank", "noopener,noreferrer");
+                                }}
+                                className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-amber-400 px-4 py-3 text-xs font-black text-black transition hover:bg-amber-300"
+                              >
+                                <MapPin className="h-4 w-4" />
+                                Track Shipment
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setTrackingModalOpen(true)}
+                                disabled={loading}
+                                className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-xs font-bold text-white transition hover:border-amber-400/30 hover:bg-amber-400/5 disabled:opacity-50"
+                              >
+                                <FileText className="h-4 w-4 text-amber-300" />
+                                Update AWB Details
+                              </button>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="rounded-xl border border-dashed border-white/15 bg-white/[0.02] px-4 py-5 text-center sm:px-6">
+                            <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl bg-white/[0.05] text-white/35">
+                              <MapPin className="h-5 w-5" />
+                            </div>
+                            <p className="mt-3 text-sm font-semibold text-white">
+                              Tracking number not added yet
+                            </p>
+                            <p className="mx-auto mt-1 max-w-sm text-[11px] leading-5 text-white/40">
+                              {order?.orderDispatch
+                                ? "Your order is dispatched. Add the courier partner and AWB number to enable shipment tracking."
+                                : "Accept and dispatch this order before adding courier and AWB details."}
+                            </p>
+
+                            {order?.orderDispatch ? (
+                              <button
+                                type="button"
+                                onClick={() => setTrackingModalOpen(true)}
+                                disabled={loading}
+                                className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-amber-400 px-5 py-3 text-xs font-black text-black transition hover:bg-amber-300 disabled:opacity-50 sm:w-auto"
+                              >
+                                <MapPin className="h-4 w-4" />
+                                Add Tracking Number
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => acceptOrReject(order._id, "dispatch")}
+                                disabled={loading || !order?.orderAccept || order?.orderReject}
+                                title={!order?.orderAccept ? "Accept the order before dispatching" : "Dispatch order"}
+                                className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-amber-400 px-5 py-3 text-xs font-black text-black transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto"
+                              >
+                                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Truck className="h-4 w-4" />}
+                                Dispatch Order
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Compact shipment status */}
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                      <div className="rounded-xl border border-white/5 bg-[#111] p-3">
+                        <p className="text-[9px] uppercase tracking-[0.14em] text-white/30">Order</p>
+                        <p className="mt-1 truncate text-xs font-semibold text-white">{progress.label}</p>
+                      </div>
+                      <div className="rounded-xl border border-white/5 bg-[#111] p-3">
+                        <p className="text-[9px] uppercase tracking-[0.14em] text-white/30">Dispatch</p>
+                        <p className={`mt-1 truncate text-xs font-semibold ${order?.orderDispatch ? "text-emerald-300" : "text-white/40"}`}>
+                          {order?.orderDispatch ? "Dispatched" : "Pending"}
+                        </p>
+                      </div>
+                      <div className="col-span-2 rounded-xl border border-white/5 bg-[#111] p-3 sm:col-span-1">
+                        <p className="text-[9px] uppercase tracking-[0.14em] text-white/30">Courier tracking</p>
+                        <p className={`mt-1 truncate text-xs font-semibold ${order?.trackingId ? "text-emerald-300" : "text-white/40"}`}>
+                          {order?.trackingId ? "AWB available" : "Awaiting AWB"}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </SectionCard>
+      </div>
+
       <main className="mx-auto max-w-[1500px] px-3 pb-10 pt-3 sm:px-5 lg:px-7">
         {activeTab === "invoice" ? (
           <div className="order-fade-in">
@@ -1009,148 +1269,7 @@ const OrderDetails = ({ order, onClose }) => {
                 </SectionCard>
               )}
 
-              {/* Dedicated Dispatch & Tracking panel */}
-              {(activeTab === "overview" || activeTab === "shipping") && (
-                <SectionCard
-                  title="Dispatch & Tracking"
-                  icon={Truck}
-                  action={
-                    <span
-                      className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold ${
-                        order?.trackingId
-                          ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-300"
-                          : "border-amber-400/20 bg-amber-400/10 text-amber-300"
-                      }`}
-                    >
-                      {order?.trackingId ? "Tracking Added" : "Not Dispatched"}
-                    </span>
-                  }
-                >
-                  <div className="space-y-4">
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <div className="rounded-2xl border border-white/10 bg-[#111] p-4">
-                        <div className="flex items-center gap-3">
-                          <div className="rounded-xl bg-amber-400/10 p-3 text-amber-300">
-                            <Truck className="h-5 w-5" />
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-[10px] uppercase tracking-[0.16em] text-white/35">
-                              Courier partner
-                            </p>
-                            <p className="mt-1 truncate text-sm font-bold text-white">
-                              {order?.courierPartner || order?.courier || "Not assigned"}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
 
-                      <div className="rounded-2xl border border-white/10 bg-[#111] p-4">
-                        <div className="flex items-center gap-3">
-                          <div className="rounded-xl bg-emerald-400/10 p-3 text-emerald-300">
-                            <MapPin className="h-5 w-5" />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-[10px] uppercase tracking-[0.16em] text-white/35">
-                              Tracking ID
-                            </p>
-                            {order?.trackingId ? (
-                              <button
-                                type="button"
-                                onClick={() => setTrackingViewOpen(true)}
-                                className="mt-1 flex max-w-full items-center gap-1.5 text-left font-mono text-sm font-bold text-amber-300 hover:text-amber-200"
-                              >
-                                <span className="truncate">{order.trackingId}</span>
-                                <ChevronRight className="h-4 w-4 shrink-0" />
-                              </button>
-                            ) : (
-                              <p className="mt-1 text-sm font-semibold text-white/30">
-                                Not added
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="rounded-2xl border border-amber-400/15 bg-gradient-to-br from-amber-400/[0.08] via-[#151515] to-[#101010] p-4 sm:p-5">
-                      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="h-2 w-2 animate-pulse rounded-full bg-amber-400" />
-                            <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-300">
-                              Dispatch control
-                            </p>
-                          </div>
-                          <p className="mt-1 text-xs leading-5 text-white/40">
-                            Dispatch the paid order first, then add or update courier and tracking information.
-                          </p>
-                        </div>
-
-                        <div className="flex w-full flex-col gap-2 sm:flex-row lg:w-auto">
-                          {!order?.orderDispatch && !order?.orderReject && (
-                            <button
-                              type="button"
-                              onClick={() => acceptOrReject(order._id, "dispatch")}
-                              disabled={loading || !order?.orderAccept}
-                              className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-amber-400 px-4 py-3 text-xs font-bold text-black transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-40 sm:flex-none"
-                              title={!order?.orderAccept ? "Accept the order before dispatching" : "Dispatch order"}
-                            >
-                              {loading ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                <Truck className="h-4 w-4" />
-                              )}
-                              Dispatch Order
-                            </button>
-                          )}
-
-                          {order?.orderDispatch && (
-                            <button
-                              type="button"
-                              onClick={() => setTrackingModalOpen(true)}
-                              disabled={loading}
-                              className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-amber-400 px-4 py-3 text-xs font-bold text-black transition hover:-translate-y-0.5 hover:bg-amber-300 disabled:opacity-50 sm:flex-none"
-                            >
-                              <MapPin className="h-4 w-4" />
-                              {order?.trackingId ? "Update Tracking" : "Add Tracking"}
-                            </button>
-                          )}
-
-                          {order?.trackingId && (
-                            <button
-                              type="button"
-                              onClick={() => setTrackingViewOpen(true)}
-                              className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-xs font-semibold text-white transition hover:border-amber-400/25 hover:bg-amber-400/5 sm:flex-none"
-                            >
-                              <Eye className="h-4 w-4 text-amber-300" />
-                              View Tracking
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="grid gap-2 sm:grid-cols-3">
-                      <div className="rounded-xl border border-white/5 bg-[#111] px-3 py-3">
-                        <p className="text-[10px] uppercase tracking-wider text-white/30">Order status</p>
-                        <p className="mt-1 text-xs font-semibold text-white">{progress.label}</p>
-                      </div>
-                      <div className="rounded-xl border border-white/5 bg-[#111] px-3 py-3">
-                        <p className="text-[10px] uppercase tracking-wider text-white/30">Dispatch</p>
-                        <p className={`mt-1 text-xs font-semibold ${order?.orderDispatch ? "text-emerald-300" : "text-white/40"}`}>
-                          {order?.orderDispatch ? "Dispatched" : "Waiting"}
-                        </p>
-                      </div>
-                      <div className="rounded-xl border border-white/5 bg-[#111] px-3 py-3">
-                        <p className="text-[10px] uppercase tracking-wider text-white/30">Tracking</p>
-                        <p className={`mt-1 truncate text-xs font-semibold ${order?.trackingId ? "text-emerald-300" : "text-white/40"}`}>
-                          {order?.trackingId || "Not added"}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </SectionCard>
-              )}
 
               {/* Products */}
               {(activeTab === "overview" || activeTab === "products") && (
@@ -1488,14 +1607,14 @@ const OrderDetails = ({ order, onClose }) => {
       {/* Compact tracking details popup */}
       {trackingViewOpen && order?.trackingId && (
         <div
-          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 p-3 backdrop-blur-sm sm:p-5"
+          className="fixed inset-0 z-[120] flex items-end justify-center overflow-y-auto bg-black/75 p-0 backdrop-blur-sm sm:items-center sm:p-5"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) setTrackingViewOpen(false);
           }}
           role="dialog"
           aria-modal="true"
         >
-          <div className="w-full max-w-md overflow-hidden rounded-3xl border border-white/10 bg-[#141414] shadow-[0_30px_100px_rgba(0,0,0,.65)]">
+          <div className="max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-t-3xl border border-white/10 bg-[#141414] shadow-[0_30px_100px_rgba(0,0,0,.65)] sm:rounded-3xl">
             <div className="h-1 bg-gradient-to-r from-amber-400 via-orange-400 to-emerald-400" />
             <div className="flex items-center justify-between border-b border-white/10 px-4 py-4 sm:px-5">
               <div className="flex min-w-0 items-center gap-3">
@@ -1516,7 +1635,7 @@ const OrderDetails = ({ order, onClose }) => {
               </button>
             </div>
 
-            <div className="space-y-3 p-4 sm:p-5">
+            <div className="space-y-3 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-5">
               <div className="rounded-2xl border border-amber-400/15 bg-amber-400/[0.05] p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -1577,16 +1696,19 @@ const OrderDetails = ({ order, onClose }) => {
       )}
 
       {/* Compact Add / Update Tracking popup */}
-      {trackingModalOpen && (
+      {trackingModalOpen && createPortal(
         <div
-          className="fixed inset-0 z-[125] flex items-center justify-center bg-black/70 p-3 backdrop-blur-sm sm:p-5"
+          className="fixed inset-0 z-[9999] flex items-center justify-center overflow-y-auto bg-black/80 p-4 backdrop-blur-md sm:p-6"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget && !loading) setTrackingModalOpen(false);
           }}
           role="dialog"
           aria-modal="true"
         >
-          <div className="w-full max-w-md overflow-hidden rounded-3xl border border-white/10 bg-[#141414] shadow-[0_30px_100px_rgba(0,0,0,.65)]">
+          <div
+            className="relative my-auto max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto overscroll-contain rounded-3xl border border-white/10 bg-[#141414] shadow-[0_30px_100px_rgba(0,0,0,.75)]"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
             <div className="h-1 bg-gradient-to-r from-amber-400 via-orange-400 to-amber-300" />
 
             <div className="flex items-center justify-between border-b border-white/10 px-4 py-4 sm:px-5">
@@ -1614,7 +1736,7 @@ const OrderDetails = ({ order, onClose }) => {
             </div>
 
             <form
-              className="space-y-4 p-4 sm:p-5"
+              className="space-y-4 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-5"
               onSubmit={(event) => {
                 event.preventDefault();
                 if (!trackingInput.trim()) {
@@ -1665,7 +1787,7 @@ const OrderDetails = ({ order, onClose }) => {
                     autoComplete="off"
                     autoCapitalize="characters"
                     disabled={loading}
-                    className="h-12 w-full rounded-xl border border-white/10 bg-[#0d0d0d] pl-10 pr-3 font-mono text-sm font-semibold tracking-wide text-white outline-none placeholder:text-white/20 focus:border-amber-400/40 focus:ring-2 focus:ring-amber-400/10 disabled:opacity-50"
+                    className="h-12 w-full rounded-xl border border-white/10 bg-[#0d0d0d] pl-10 pr-3 font-mono text-base font-semibold tracking-wide text-white outline-none placeholder:text-sm placeholder:text-white/20 focus:border-amber-400/40 focus:ring-2 focus:ring-amber-400/10 disabled:opacity-50 sm:text-sm"
                   />
                 </div>
               </div>
@@ -1699,24 +1821,31 @@ const OrderDetails = ({ order, onClose }) => {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* =====================================================
           Hidden A4 GST PAD BILL
           This is intentionally white and print/PDF friendly.
           ===================================================== */}
-      <div className="pointer-events-none fixed left-[-100000px] top-0 opacity-0">
+      <div className="pointer-events-none fixed left-[-100000px] top-0 opacity-0" aria-hidden="true">
         <div
           ref={invoiceRef}
           style={{
             width: "794px",
             minHeight: "1123px",
+            height: "auto",
+            boxSizing: "border-box",
             background: "#fff",
             color: "#111",
             padding: "34px",
+            margin: 0,
             fontFamily: "Arial, Helvetica, sans-serif",
             fontSize: "11px",
+            lineHeight: 1.4,
+            WebkitPrintColorAdjust: "exact",
+            printColorAdjust: "exact",
           }}
         >
           <div style={{ border: "1px solid #222", minHeight: "100%" }}>
@@ -1781,7 +1910,7 @@ const OrderDetails = ({ order, onClose }) => {
             </div>
 
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
+              <thead style={{ display: "table-header-group" }}>
                 <tr style={{ background: "#f1f1f1" }}>
                   {["S.No", "Description", "HSN", "Qty", "Rate", "Amount"].map((heading, index) => (
                     <th
@@ -1805,7 +1934,7 @@ const OrderDetails = ({ order, onClose }) => {
                   const rate = amount / qty;
 
                   return (
-                    <tr key={item?._id || `${item?.title}-${index}`}>
+                    <tr key={item?._id || `${item?.title}-${index}`} style={{ breakInside: "avoid", pageBreakInside: "avoid" }}>
                       <td style={{ border: "1px solid #222", padding: "8px 6px", textAlign: "center" }}>{index + 1}</td>
                       <td style={{ border: "1px solid #222", padding: "8px 6px" }}>
                         <b>{item?.title || "Product"}</b>
@@ -1848,7 +1977,7 @@ const OrderDetails = ({ order, onClose }) => {
               </table>
             </div>
 
-            <div style={{ padding: "0 18px 18px" }}>
+            <div style={{ padding: "0 18px 18px", breakInside: "avoid", pageBreakInside: "avoid" }}>
               <div style={{ border: "1px solid #999", padding: "10px", fontSize: "9px", lineHeight: 1.5 }}>
                 <b>Amount in words:</b> {money(totals.grandTotal)} only.
                 <br />

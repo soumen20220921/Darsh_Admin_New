@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState, useCallback } from "react";
+import { createPortal } from "react-dom";
 import {
   AlertTriangle,
   ArrowDownRight,
@@ -342,6 +343,23 @@ const Dashboard = () => {
   // 🔽 Default to "paid" so only paid orders appear first
   const [orderTab, setOrderTab] = useState("paid");
   const [dashboardPopup, setDashboardPopup] = useState(null);
+
+  useEffect(() => {
+    if (!dashboardPopup) return undefined;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    const handleEscape = (event) => {
+      if (event.key === "Escape") setDashboardPopup(null);
+    };
+
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [dashboardPopup]);
 
   useEffect(() => {
     let mounted = true;
@@ -2608,9 +2626,19 @@ const Dashboard = () => {
           </Card>
         </section>
 
-        {dashboardPopup && (
-          <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/75 p-0 backdrop-blur-md sm:items-center sm:p-4 md:p-6" onClick={() => setDashboardPopup(null)}>
-            <div className="dashboard-safe-bottom flex max-h-[94dvh] w-full max-w-3xl flex-col overflow-hidden rounded-t-[1.75rem] border border-white/10 bg-[#151515] shadow-[0_24px_90px_rgba(0,0,0,.55)] sm:max-h-[90dvh] sm:rounded-3xl" onClick={(event) => event.stopPropagation()}>
+        {dashboardPopup && createPortal(
+          <div
+            className="fixed inset-0 z-[9999] flex items-center justify-center overflow-y-auto bg-black/80 p-3 backdrop-blur-md sm:p-5 md:p-6"
+            onClick={() => setDashboardPopup(null)}
+            role="presentation"
+          >
+            <div
+              className="my-auto flex max-h-[calc(100dvh-1.5rem)] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-white/10 bg-[#151515] shadow-[0_30px_100px_rgba(0,0,0,.7)] sm:max-h-[calc(100dvh-2.5rem)]"
+              onClick={(event) => event.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              aria-label="Dashboard details"
+            >
               <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/[0.07] px-4 py-3.5 sm:px-6 sm:py-4">
                 <div className="min-w-0">
                   <p className="text-[10px] uppercase tracking-[.14em] text-[#666]">
@@ -2660,7 +2688,8 @@ const Dashboard = () => {
               </div>
               <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-white/[0.07] bg-[#121212] px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6"><span className="text-[10px] text-[#666]">Tap outside or close to dismiss</span><button type="button" onClick={() => { setDashboardPopup(null); goToOrders(); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="inline-flex items-center gap-1.5 rounded-xl bg-amber-500 px-3 py-2 text-[10px] font-bold text-black hover:bg-amber-400">Open Orders <ChevronRight size={13}/></button></div>
             </div>
-          </div>
+          </div>,
+          document.body
         )}
 
         {/* Responsive dashboard insights */}
